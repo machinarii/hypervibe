@@ -103,6 +103,9 @@ class MenuBarManager {
     // Scroll speed (used for trackpad scroll scale; no menu, native multitouch)
     private(set) var scrollSpeed: ScrollSpeed = .medium
 
+    /// Set by app delegate so menu bar can delegate media actions to MediaController.
+    var mediaController: MediaController?
+
     init(statusItem: NSStatusItem) {
         self.statusItem = statusItem
         self.menu = NSMenu()

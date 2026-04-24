@@ -41,6 +41,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Initialize controllers
         let cursorController = CursorController()
+        menuBarManager.mediaController = MediaController()
 
         remoteInputHandler = RemoteInputHandler(
             cursorController: cursorController,
