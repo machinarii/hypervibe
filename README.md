@@ -1,6 +1,6 @@
 <img src="banner.png" alt="HyperVibe — a walkie-talkie for Claude Code">
 
-# HyperVibe
+# HyperVibe V0.1
 
 A macOS menu-bar app that turns a paired Apple TV Siri Remote into **a walkie-talkie for Claude Code**.
 
@@ -9,6 +9,8 @@ Grab a remote, push to talk, and vibe-code with Claude Code without breaking flo
 Hyper optimize your vibe coding workflow with a single hand!
 
 Tested with the 1st-gen Siri Remote (Model A1513). Support for Xbox Adaptive Joystick coming soon.
+
+> **Experimental release.** For now, HyperVibe ships as an experiment — there is no pre-built binary. You'll have to build the app bundle yourself (see [Building](#building)). Your mileage may vary.
 
 ---
 
@@ -132,11 +134,30 @@ A physical Siri Remote press can arrive two ways:
 
 Both paths converge on the same button mapping through a 200 ms debounce (static `lastProcessedButton`/`lastProcessedTime` on `RemoteInputHandler`), so a press fires the mapped action exactly once regardless of which path delivers it first.
 
+### The NX_SYSDEFINED hack (media keys)
+
+macOS has no public API for synthesizing or intercepting media keys (Play/Pause, Next, Previous, Volume, Mute). Both `MediaKeyInterceptor` and `MediaController` rely on the same undocumented `NSSystemDefined` event format used internally by the Human Interface Device stack:
+
+- **Event type** `NX_SYSDEFINED` (raw value `14`) with **subtype `8`**.
+- **Key code and state packed into `data1`** as a bitfield: `(nxKeyCode << 16) | (keyState << 8)`, where `0xA` = key down and `0xB` = key up.
+- **Magic `modifierFlags`** (`0xa00` for down, `0xb00` for up) mirror the state nibble — real media key events arrive with these flags, and some consumers (e.g. Music.app) won't accept posted events without them.
+
+`MediaKeyInterceptor` installs a **`.cghidEventTap`** at `.headInsertEventTap` so it sees `NX_SYSDEFINED` events *before* the system dispatcher routes them to Music/iTunes/etc. — a session-level tap would arrive too late. It then manually unpacks `data1` to recover the key code and down/up state. The tap is automatically re-enabled on `tapDisabledByTimeout`, `tapDisabledByUserInput`, and `NSWorkspace.didWakeNotification`, because macOS silently disables event taps across sleep/wake and input stalls.
+
+`MediaController` goes the other way: it **fabricates** matching `NSSystemDefined` events via `NSEvent.otherEvent(...)` with the same magic flags, subtype, and `data1` packing, then posts the underlying `CGEvent` to the session tap. A **`usleep(50_000)`** gap between the down and up events is required — without the 50 ms pause, macOS coalesces or drops the pair and the media key is ignored.
+
+This is the standard reverse-engineered technique (originally surfaced in projects like SPMediaKeyTap and Noteify), but it is entirely undocumented and can change without notice in any macOS release.
+
 ---
 
 ## Caveats
 
 - Uses Apple's **private `MultitouchSupport` framework** — not App Store compatible; Apple may change or remove this API in future macOS releases.
+- **NX_SYSDEFINED media-key synthesis and interception is undocumented** — relies on magic modifier-flag values (`0xa00`/`0xb00`), subtype `8`, and a manual `data1` bitfield layout. Apple could break this in any release.
+
+### Long-term direction: Xbox Adaptive Joystick
+
+Between the private `MultitouchSupport` framework and the undocumented `NX_SYSDEFINED` plumbing, the Siri Remote path is built on two proprietary, reverse-engineered interfaces that Apple can break at any time. HyperVibe may migrate its primary input to the **Xbox Adaptive Joystick**, which speaks standard USB HID / GameController.framework and avoids every proprietary hazard above. That gives a more permanent, App Store–viable foundation — and, as a bonus, a genuinely accessible input device — while the Siri Remote support remains as a best-effort path for users who already own one.
 - Tested on **Siri Remote 1st-gen (A1513, product ID `0x266`)**. Button HID codes are a superset likely to cover the 2nd-gen Siri Remote (A2540) as well, but its click-ring directional presses and dedicated Mute button are not yet mapped in `identifyButton`.
 - Ad-hoc signing ties TCC permission grants to the exact binary hash — rebuilds may require re-approval in System Settings.
 
