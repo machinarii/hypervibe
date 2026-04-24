@@ -1,6 +1,6 @@
 //
 //  MediaController.swift
-//  Remotastic
+//  HyperVibe
 //
 //  Sends system media key events (NX_SYSDEFINED subtype 8) for remote button mappings.
 //

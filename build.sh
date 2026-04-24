@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Build script for Remotastic
+# Build script for HyperVibe
 # Make sure Xcode Command Line Tools are installed: xcode-select --install
 
 set -e
 
-echo "Building Remotastic..."
+echo "Building HyperVibe..."
 
 SWIFT_FILES=(
     "main.swift"
@@ -44,7 +44,7 @@ echo "Building for: $TARGET"
 swiftc \
     -sdk "$SDK_PATH" \
     -target "$TARGET" \
-    -o Remotastic \
+    -o HyperVibe \
     "${SWIFT_FILES[@]}" \
     -import-objc-header SiriRemote-Bridging-Header.h \
     -F /System/Library/PrivateFrameworks \
@@ -63,7 +63,7 @@ if [ $? -eq 0 ]; then
     echo "  ./create_app_bundle.sh"
     echo ""
     echo "Or run directly with:"
-    echo "  ./Remotastic"
+    echo "  ./HyperVibe"
 else
     echo ""
     echo "✗ Build failed!"

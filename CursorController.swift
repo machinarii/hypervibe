@@ -1,6 +1,6 @@
 //
 //  CursorController.swift
-//  Remotastic
+//  HyperVibe
 //
 //  Controls cursor movement and clicking using CGEvent
 //

@@ -5,14 +5,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "Remotastic",
+    name: "HyperVibe",
     platforms: [.macOS(.v11)],
     products: [
-        .executable(name: "Remotastic", targets: ["Remotastic"])
+        .executable(name: "HyperVibe", targets: ["HyperVibe"])
     ],
     targets: [
         .executableTarget(
-            name: "Remotastic",
+            name: "HyperVibe",
             path: ".",
             sources: [
                 "main.swift",

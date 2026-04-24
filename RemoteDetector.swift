@@ -1,6 +1,6 @@
 //
 //  RemoteDetector.swift
-//  Remotastic
+//  HyperVibe
 //
 //  Detects Siri Remote via IOKit HID
 //
@@ -9,11 +9,11 @@ import Foundation
 import IOKit
 import IOKit.hid
 
-/// Append diagnostic line to /tmp/remotastic.log (unified-log redacts NSLog under hardened runtime).
+/// Append diagnostic line to /tmp/hypervibe.log (unified-log redacts NSLog under hardened runtime).
 func rmDebug(_ msg: String) {
     let line = "\(Date()) \(msg)\n"
     if let data = line.data(using: .utf8) {
-        let path = "/tmp/remotastic.log"
+        let path = "/tmp/hypervibe.log"
         if let fh = FileHandle(forWritingAtPath: path) {
             fh.seekToEndOfFile()
             fh.write(data)
@@ -32,7 +32,7 @@ class RemoteDetector {
     // Track devices by vendorID:productID combination
     // A single physical Siri Remote may expose multiple HID interfaces, but we only want to process one
     private var processedDeviceKeys: Set<String> = []
-    private let processingQueue = DispatchQueue(label: "com.remotastic.deviceProcessing")
+    private let processingQueue = DispatchQueue(label: "com.hypervibe.deviceProcessing")
     
     private let appleVendorID: Int = 0x004C
     

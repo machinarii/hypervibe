@@ -1,6 +1,6 @@
 //
 //  MenuBarManager.swift
-//  Remotastic
+//  HyperVibe
 //
 //  Manages the menu bar icon and menu
 //
@@ -19,6 +19,7 @@ enum ButtonAction: String, CaseIterable {
     case spaceKey = "Space: Claude Voice Dictation"
     case rightCmd = "Right Command: 3rd-party Voice Dictation"
     case rightOpt = "Right Option: 3rd-party Voice Dictation"
+    case trackpadClick = "Trackpad Click"
 
     /// Push-to-talk dictation needs the virtual key held for the full press duration.
     /// Only a subset of HID buttons emit reliable release events, so these actions are
@@ -31,9 +32,39 @@ enum ButtonAction: String, CaseIterable {
     }
 }
 
-/// HID buttons whose driver emits both press (value=1) and release (value=0) — verified via /tmp/remotastic.log.
+/// HID buttons whose driver emits both press (value=1) and release (value=0) — verified via /tmp/hypervibe.log.
 /// menu/tv/select are excluded: menu/tv are press-only on the Siri Remote, select is handled separately for click/drag.
 let holdCapableButtons: Set<String> = ["playPause", "volumeUp", "volumeDown", "siri"]
+
+/// Trackpad swipe directions (single-finger flicks). Detection happens in TouchHandler;
+/// execution is dispatched here so mappings live alongside button mappings.
+enum SwipeDirection: String, CaseIterable {
+    case up, down, left, right
+}
+
+/// Action a swipe can trigger. Slash-command cases type the raw value (without Enter — user
+/// presses Enter themselves). `leftArrow`/`rightArrow` send virtual arrow keys instead of text.
+/// `init` is a Swift keyword so the case name is backtick-escaped; rawValue "/init" is what displays.
+enum SwipeAction: String, CaseIterable {
+    // Priority order: direction-matched arrow (filtered per submenu), then Mode Switching,
+    // then ultrathink, then slash commands alphabetically, None last.
+    case leftArrow     = "Left: Navigate Left"
+    case rightArrow    = "Right: Navigate Right"
+    case modeSwitch    = "Mode Switching (Shift + Tab)"
+    case ultrathink    = "ultrathink"
+    case btw           = "/btw"
+    case compact       = "/compact"
+    case config        = "/config"
+    case context       = "/context"
+    case effort        = "/effort"
+    case `init`        = "/init"
+    case model         = "/model"
+    case remoteControl = "/remote-control"
+    case schedule      = "/schedule"
+    case tasks         = "/tasks"
+    case usage         = "/usage"
+    case none          = "None"
+}
 
 // Scroll speed options
 enum ScrollSpeed: String, CaseIterable {
@@ -58,7 +89,17 @@ class MenuBarManager {
     
     // Button mappings (stored in UserDefaults)
     private var buttonMappings: [String: ButtonAction] = [:]
-    
+
+    // Swipe gesture mappings (stored in UserDefaults under "swipeMappings").
+    private var swipeMappings: [SwipeDirection: SwipeAction] = [:]
+
+    private static let defaultSwipeMappings: [SwipeDirection: SwipeAction] = [
+        .up:    .usage,
+        .down:  .compact,
+        .left:  .model,
+        .right: .modeSwitch,
+    ]
+
     // Scroll speed (used for trackpad scroll scale; no menu, native multitouch)
     private(set) var scrollSpeed: ScrollSpeed = .medium
     
@@ -74,6 +115,7 @@ class MenuBarManager {
         self.statusMenuItem = NSMenuItem(title: "Status: Disconnected", action: nil, keyEquivalent: "")
         
         loadMappings()
+        loadSwipeMappings()
         setupMenuBar()
     }
     
@@ -82,19 +124,28 @@ class MenuBarManager {
         let defaultMappings: [String: ButtonAction] = [
             "playPause": .enterKey,
             "menu": .escKey,
-            "select": .enterKey,
+            "select": .trackpadClick,
             "volumeUp": .upKey,
             "volumeDown": .downKey,
             "siri": .spaceKey,
             "tv": .ctrlC
         ]
 
-        // Schema version bump: old media-key actions are no longer representable.
-        // On upgrade, drop saved mappings and apply the new defaults.
-        let currentSchema = 3
+        // Schema version bumps:
+        //   v3: old media-key actions removed — drop all saved button mappings
+        //   v4: "select" default changed from .enterKey to .trackpadClick — reset just that entry
+        let currentSchema = 4
         let savedSchema = UserDefaults.standard.integer(forKey: "buttonMappingsSchema")
-        if savedSchema < currentSchema {
+        if savedSchema < 3 {
             UserDefaults.standard.removeObject(forKey: "buttonMappings")
+        } else if savedSchema < 4 {
+            // Targeted migration: reset "select" so the new default applies, preserve others.
+            if var saved = UserDefaults.standard.dictionary(forKey: "buttonMappings") as? [String: String] {
+                saved.removeValue(forKey: "select")
+                UserDefaults.standard.set(saved, forKey: "buttonMappings")
+            }
+        }
+        if savedSchema < currentSchema {
             UserDefaults.standard.set(currentSchema, forKey: "buttonMappingsSchema")
         }
 
@@ -128,26 +179,53 @@ class MenuBarManager {
         onMappingsChanged?(buttonMappings)
     }
     
+    /// Draw a walkie-talkie silhouette for the menu-bar icon. Template image → auto-tinted by macOS.
+    /// Body is filled with even-odd rule so the display and speaker openings are transparent holes.
+    private static func makeWaveIcon() -> NSImage {
+        // Scaled 20% down from the original 16×22 design; antenna is thicker relative to the body.
+        let scale: CGFloat = 0.8
+        let size = NSSize(width: 16 * scale, height: 22 * scale)
+        let image = NSImage(size: size, flipped: false) { rect in
+            // Coordinate system: origin bottom-left. All rects scaled uniformly.
+            let bodyRect    = NSRect(x: 2 * scale,  y: 0,            width: 12 * scale, height: 16 * scale)
+            let displayRect = NSRect(x: 4 * scale,  y: 12 * scale,   width: 8 * scale,  height: 2.4 * scale)
+            let speakerRect = NSRect(x: 5 * scale,  y: 2 * scale,    width: 6 * scale,  height: 6 * scale)
+            let bodyRadius:    CGFloat = 1.6 * scale
+            let displayRadius: CGFloat = 0.5 * scale
+
+            // Body + cutouts as one even-odd path so the holes are truly transparent (required for template tinting).
+            let body = NSBezierPath()
+            body.appendRoundedRect(bodyRect, xRadius: bodyRadius, yRadius: bodyRadius)
+            body.appendRoundedRect(displayRect, xRadius: displayRadius, yRadius: displayRadius)
+            body.appendOval(in: speakerRect)
+            body.windingRule = .evenOdd
+            NSColor.black.setFill()
+            body.fill()
+
+            // Single antenna rising from left-of-center. Line width is not scaled down with the
+            // body — boosted to 1.6pt so it reads thicker than the original 1.2pt despite the 20% shrink.
+            NSColor.black.setStroke()
+            let antenna = NSBezierPath()
+            antenna.lineWidth = 1.6
+            antenna.lineCapStyle = .round
+            antenna.move(to: NSPoint(x: 5.5 * scale, y: 16 * scale))
+            antenna.line(to: NSPoint(x: 5.5 * scale, y: 21.2 * scale))
+            antenna.stroke()
+
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
     private func setupMenuBar() {
         // Configure the button (the visible icon in menu bar)
         guard let button = statusItem.button else {
             return
         }
         
-        button.title = "SR"
-        
-        // Try SF Symbol if available
-        if #available(macOS 11.0, *) {
-            let symbolNames = ["appletvremote.gen4", "tv.and.mediabox", "remote"]
-            for name in symbolNames {
-                if let image = NSImage(systemSymbolName: name, accessibilityDescription: "Siri Remote") {
-                    image.isTemplate = true
-                    button.image = image
-                    button.title = ""
-                    break
-                }
-            }
-        }
+        button.image = Self.makeWaveIcon()
+        button.title = ""
         
         rebuildMenu()
         statusItem.menu = menu
@@ -157,7 +235,7 @@ class MenuBarManager {
         menu.removeAllItems()
         
         // Title
-        let titleItem = NSMenuItem(title: "Siri Remote Controller", action: nil, keyEquivalent: "")
+        let titleItem = NSMenuItem(title: "Siri Remote", action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
         
@@ -174,13 +252,13 @@ class MenuBarManager {
         let mappingsSubmenu = NSMenu()
         
         let buttons = [
-            ("playPause", "Play/Pause Button"),
+            ("select", "Trackpad Click"),
             ("menu", "Menu Button"),
-            ("select", "Select (Click)"),
+            ("tv", "TV Button"),
+            ("siri", "Siri Button"),
+            ("playPause", "Play/Pause Button"),
             ("volumeUp", "Volume Up"),
             ("volumeDown", "Volume Down"),
-            ("tv", "TV Button"),
-            ("siri", "Siri Button")
         ]
         
         for (key, label) in buttons {
@@ -209,9 +287,40 @@ class MenuBarManager {
         
         mappingsItem.submenu = mappingsSubmenu
         menu.addItem(mappingsItem)
-        
+
+        // Swipe Gestures submenu
+        let swipeItem = NSMenuItem(title: "Swipe Gestures", action: nil, keyEquivalent: "")
+        let swipeSubmenu = NSMenu()
+        let swipes: [(SwipeDirection, String)] = [
+            (.up,    "Swipe Up"),
+            (.down,  "Swipe Down"),
+            (.left,  "Swipe Left"),
+            (.right, "Swipe Right"),
+        ]
+        for (direction, label) in swipes {
+            let dirItem = NSMenuItem(title: label, action: nil, keyEquivalent: "")
+            let actionsMenu = NSMenu()
+            for action in SwipeAction.allCases {
+                // Each arrow-key action only appears on its matching swipe direction.
+                if action == .leftArrow  && direction != .left  { continue }
+                if action == .rightArrow && direction != .right { continue }
+
+                let actionItem = NSMenuItem(title: action.rawValue, action: #selector(changeSwipeMapping(_:)), keyEquivalent: "")
+                actionItem.target = self
+                actionItem.representedObject = (direction, action)
+                if swipeMappings[direction] == action {
+                    actionItem.state = .on
+                }
+                actionsMenu.addItem(actionItem)
+            }
+            dirItem.submenu = actionsMenu
+            swipeSubmenu.addItem(dirItem)
+        }
+        swipeItem.submenu = swipeSubmenu
+        menu.addItem(swipeItem)
+
         menu.addItem(NSMenuItem.separator())
-        
+
         // Quit
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
@@ -224,6 +333,15 @@ class MenuBarManager {
         }
         buttonMappings[buttonKey] = action
         saveMappings()
+        rebuildMenu()
+    }
+
+    @objc private func changeSwipeMapping(_ sender: NSMenuItem) {
+        guard let (direction, action) = sender.representedObject as? (SwipeDirection, SwipeAction) else {
+            return
+        }
+        swipeMappings[direction] = action
+        saveSwipeMappings()
         rebuildMenu()
     }
     
@@ -262,6 +380,75 @@ class MenuBarManager {
         return action.rawValue
     }
     
+    private func loadSwipeMappings() {
+        if let saved = UserDefaults.standard.dictionary(forKey: "swipeMappings") as? [String: String] {
+            for (dirRaw, actionRaw) in saved {
+                if let dir = SwipeDirection(rawValue: dirRaw),
+                   let act = SwipeAction(rawValue: actionRaw) {
+                    swipeMappings[dir] = act
+                }
+            }
+        }
+        // Fill any missing directions with defaults.
+        for (dir, act) in Self.defaultSwipeMappings where swipeMappings[dir] == nil {
+            swipeMappings[dir] = act
+        }
+    }
+
+    private func saveSwipeMappings() {
+        var toSave: [String: String] = [:]
+        for (dir, act) in swipeMappings {
+            toSave[dir.rawValue] = act.rawValue
+        }
+        UserDefaults.standard.set(toSave, forKey: "swipeMappings")
+    }
+
+    func getSwipeMapping(for direction: SwipeDirection) -> SwipeAction {
+        return swipeMappings[direction] ?? .none
+    }
+
+    /// Execute the action bound to a swipe direction. Slash-command actions type text
+    /// (no Enter — user presses Enter themselves). Arrow/modifier actions send key events.
+    func executeSwipe(_ direction: SwipeDirection) {
+        let action = swipeMappings[direction] ?? SwipeAction.none
+        switch action {
+        case .none:
+            break
+        case .leftArrow:
+            sendKey(kVK_LeftArrow)
+        case .rightArrow:
+            sendKey(kVK_RightArrow)
+        case .modeSwitch:
+            sendKey(kVK_Tab, flags: .maskShift)
+        case .btw, .schedule, .ultrathink:
+            // Trailing space: user typically continues with an argument or prose.
+            typeString(action.rawValue + " ")
+        case .compact, .config, .context, .effort, .`init`,
+             .model, .remoteControl, .tasks, .usage:
+            // No trailing space: these commands stand alone or open an interactive picker.
+            typeString(action.rawValue)
+        }
+    }
+
+    /// Post the given string as a single keyboard event via `keyboardSetUnicodeString`.
+    /// Works across terminals and most text fields; bypasses layout-specific key codes.
+    private func typeString(_ s: String) {
+        let utf16 = Array(s.utf16)
+        let count = utf16.count
+        guard count > 0 else { return }
+        utf16.withUnsafeBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return }
+            let src = CGEventSource(stateID: .hidSystemState)
+            let down = CGEvent(keyboardEventSource: src, virtualKey: 0, keyDown: true)
+            down?.keyboardSetUnicodeString(stringLength: count, unicodeString: base)
+            down?.post(tap: .cghidEventTap)
+            usleep(5000)
+            let up = CGEvent(keyboardEventSource: src, virtualKey: 0, keyDown: false)
+            up?.keyboardSetUnicodeString(stringLength: count, unicodeString: base)
+            up?.post(tap: .cghidEventTap)
+        }
+    }
+
     /// Execute an action by name
     func executeAction(_ actionName: String) {
         guard let action = ButtonAction(rawValue: actionName) else { return }
@@ -285,6 +472,8 @@ class MenuBarManager {
             sendModifierTap(kVK_RightCommand, flag: .maskCommand)
         case .rightOpt:
             sendModifierTap(kVK_RightOption, flag: .maskAlternate)
+        case .trackpadClick:
+            performClick()
         }
     }
 
