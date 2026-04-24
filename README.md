@@ -2,11 +2,9 @@
 
 # HyperVibe V0.1
 
-A macOS menu-bar app that turns a paired Apple TV Siri Remote into **a walkie-talkie for Claude Code**.
+One-handed vibe coding using Apple TV remote, customizable buttons and gestures.
 
-Grab a remote, push to talk, and vibe-code with Claude Code without breaking flow. 
-
-Hyper optimize your vibe coding workflow with a single hand!
+Grab a remote, push to talk, and vibe-code with Claude Code without breaking flow.
 
 <img src="demo.gif" alt="HyperVibe demo" width="70%">
 
