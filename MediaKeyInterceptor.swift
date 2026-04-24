@@ -1,6 +1,6 @@
 //
 //  MediaKeyInterceptor.swift
-//  HyperVibe
+//  Remotastic
 //
 //  Intercepts system media key events at HID level to reliably prevent default handling.
 //  Re-enables tap when disabled by timeout/sleep and on wake.
