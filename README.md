@@ -1,20 +1,23 @@
 # HyperVibe
 
-A macOS menu-bar app that turns a paired Apple TV Siri Remote into a **trackpad, button controller, and Claude Code gesture pad** for your Mac.
+A macOS menu-bar app that turns a paired Apple TV Siri Remote into a **a walkie talkie for Claude Code ** for your Mac.
 
-> **Fork & improvements.** HyperVibe is built on top of [Remotastic](https://github.com/lauschue/Remotastic) by [@lauschue](https://github.com/lauschue), which provided the foundational Siri-Remote HID handling, MultitouchSupport integration, and menu-bar scaffolding. HyperVibe extends it with configurable Claude Code workflows, hold-capable push-to-talk, trackpad swipe commands, hardened-runtime signing for modern macOS, and a refreshed identity (name, icon, menu-bar glyph).
+Hyper optimize your vibe coding productivity with HyperVibe and Claude Code! Just grab, push and talk!
+
+It has been tested with Siri Remote Model A1513 (1st Gen).
 
 ---
 
 ## Features
 
-### Trackpad (Siri Remote surface)
+### Trackpad
 
+- **Trackpad swipe gestures** — single-finger flicks in each of four directions fire a configurable action (see "Swipe Gestures" below)
 - **Cursor movement** via single-finger drag
 - **Two-finger scroll** (natural-scroll direction, configurable scale)
 - **Tap-to-click** on the trackpad surface
 - **Drag** by holding the trackpad click and moving
-- **Trackpad swipe gestures** — single-finger flicks in each of four directions fire a configurable action (see "Swipe Gestures" below)
+
 
 ### Buttons
 
@@ -33,9 +36,9 @@ Each physical Siri Remote button is independently assignable via the menu bar �
 | Right Command: 3rd-party Voice Dictation *(hold)* | Press-to-talk Right ⌘ |
 | Right Option: 3rd-party Voice Dictation *(hold)* | Press-to-talk Right ⌥ |
 
-**Hold-capable filtering.** Push-to-talk actions require buttons that emit both press and release HID events. Only Play/Pause, Volume Up, Volume Down, and Siri pass — so these voice-dictation options are hidden in the submenus for Menu and TV, which only fire on press.
+**Hold-Capable Buttons:** Push-to-talk actions require buttons that emit both press and release HID events. Only Play/Pause, Volume Up, Volume Down, and Siri buttons allow for both events.
 
-**Defaults (first launch):**
+**Default Button Mapping (Customizable):**
 - Trackpad Click → Trackpad Click
 - Menu → Esc
 - TV → Ctrl + C
@@ -44,7 +47,7 @@ Each physical Siri Remote button is independently assignable via the menu bar �
 - Volume Up → Up
 - Volume Down → Down
 
-![Default Siri Remote button mapping](siri-remote-button-mapping-default.png)
+<img src="siri-remote-button-mapping-default.png" alt="Default Siri Remote button mapping" width="50%">
 
 ### Swipe Gestures
 
@@ -62,13 +65,13 @@ Assignable actions per direction:
 
 **Enter is never sent** — gestures type the command but leave Enter for the user, so the command can be reviewed, edited, or augmented with arguments.
 
-**Defaults (first launch):**
+**Default Gesture Mapping (Customizable):**
 - Swipe Up → `/usage`
 - Swipe Down → `/compact`
 - Swipe Left → `/model`
 - Swipe Right → Mode Switching (Shift + Tab)
 
-![Siri Remote swipe gesture mapping](siri-remote-gesture-mapping.png)
+<img src="siri-remote-gesture-mapping.png" alt="Siri Remote swipe gesture mapping" width="50%">
 
 ### Persistence
 
@@ -79,14 +82,6 @@ Button mappings and swipe mappings are saved to UserDefaults (`buttonMappings`, 
 - **Stuck-key prevention.** If the remote disconnects while a push-to-talk key is held, HyperVibe releases the virtual key automatically.
 - **Stale-hold self-heal.** If a release HID event is ever missed, the next press closes the stale hold before opening a new one.
 - **HID seize.** On connect, HyperVibe seizes the remote at the HID level so macOS no longer also sees media key events from it — no double-dispatch (e.g., to iTunes/Music), no system funk sound on unhandled keys.
-- **No click sounds.** All `NSSound.beep()` feedback from the upstream project has been removed — silent operation.
-
-### Identity
-
-- **App name**: HyperVibe
-- **Bundle identifier**: `com.hypervibe.app`
-- **Menu-bar glyph**: custom-drawn walkie-talkie (template image, auto-tints for light/dark menu bar)
-- **App icon**: white walkie-talkie silhouette on a warm-coral squircle (shades of `#F07654`: darker on top, base mid, lighter peach at the bottom); display and speaker are transparent cutouts showing the gradient through
 
 ---
 
@@ -104,28 +99,6 @@ Button mappings and swipe mappings are saved to UserDefaults (`buttonMappings`, 
 ```
 
 This runs a single `swiftc` invocation over all the project's Swift files, linking IOKit, CoreGraphics, AudioToolbox, Carbon, AppKit, and the private MultitouchSupport framework via a bridging header. No Xcode project is required.
-
-### Bundle and sign
-
-```bash
-./create_app_bundle.sh
-```
-
-Produces `HyperVibe.app` with:
-
-- Info.plist entries (bundle ID, Bluetooth usage descriptions, `LSUIElement=true` for menu-bar-only behavior)
-- Bundled `HyperVibe.icns` icon
-- Hardened runtime + entitlements (`com.apple.security.device.bluetooth`, library validation disabled for MultitouchSupport)
-- Ad-hoc code signature (`--sign -`). Swap in a Developer ID identity for distribution.
-
-Hardened runtime with entitlements is **required** on macOS 14+ for `IOHIDManager` to deliver Bluetooth HID events from the Siri Remote.
-
-### Regenerating the icon
-
-```bash
-swift gen_icon.swift            # renders PNGs into HyperVibe.iconset/
-iconutil -c icns HyperVibe.iconset
-```
 
 ---
 
@@ -183,5 +156,5 @@ Both paths converge on the same button mapping through a 200 ms debounce (static
 
 ## Credits and License
 
-- Original project: [Remotastic](https://github.com/lauschue/Remotastic) by [@lauschue](https://github.com/lauschue) — HyperVibe is a fork that preserves the core trackpad/HID architecture while extending it for a Claude Code workflow.
+ **Fork & improvements.** HyperVibe is built on top of [Remotastic](https://github.com/lauschue/Remotastic) by [@lauschue](https://github.com/lauschue), which provided the foundational Siri-Remote HID handling, MultitouchSupport integration, and menu-bar scaffolding. HyperVibe extends it with configurable Claude Code workflows, shortcuts, push-to-talk and swipe gesture.
 - License: see `LICENSE`.
