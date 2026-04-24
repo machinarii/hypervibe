@@ -32,6 +32,11 @@ class RemoteInputHandler {
     // Prevent double-processing with MediaKeyInterceptor
     static var lastProcessedButton: String?
     static var lastProcessedTime: UInt64 = 0
+
+    /// Virtual keys currently held down, keyed by the HID button that initiated the hold.
+    /// Captured at press time so release can fire the correct keyUp even if the user
+    /// rebinds the button mid-hold. Cleared on device removal to avoid stuck modifiers.
+    private var heldKeys: [String: (keyCode: Int, flags: CGEventFlags)] = [:]
     
     init(cursorController: CursorController, mediaController: MediaController, menuBarManager: MenuBarManager) {
         self.cursorController = cursorController
@@ -41,6 +46,7 @@ class RemoteInputHandler {
     
     func setRemoteDevice(_ device: IOHIDDevice?) {
         guard let device = device else {
+            releaseAllHeldKeys()
             for d in devices {
                 IOHIDDeviceRegisterInputValueCallback(d, nil, nil)
                 IOHIDDeviceUnscheduleFromRunLoop(d, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
@@ -85,33 +91,34 @@ class RemoteInputHandler {
         rmDebug(String(format: "🎮 HID event: page=0x%X usage=0x%X value=%d → %@",
                        usagePage, usage, intValue, identified ?? "<unmapped>"))
         guard let buttonName = identified else { return }
-        
-        // Any button activity may cause the remote to re-enumerate; re-scan MT so trackpad can reconnect.
+
         onButtonActivity?()
-        
-        // First key-down after connection: do not perform action (sound already played at connect).
+
+        // First key-down after connection: skip so the connect handshake doesn't fire an action.
         if intValue == 1 && isFirstPressAfterConnection {
             isFirstPressAfterConnection = false
             return
         }
-        
-        // Handle select button (trackpad click) - distinguish click vs drag
+
+        // Select is the trackpad click — handled separately for click/drag semantics.
         if buttonName == "select" {
             handleSelectButton(pressed: intValue == 1)
             return
         }
-        
-        // Other buttons: only process on key down
-        guard intValue == 1 else { return }
-        
-        // Mark this button as processed to prevent MediaKeyInterceptor from double-processing
-        let currentTime = mach_absolute_time()
-        RemoteInputHandler.lastProcessedButton = buttonName
-        RemoteInputHandler.lastProcessedTime = currentTime
-        
-        let action = menuBarManager?.getMapping(for: buttonName) ?? .none
-        print("🔘 Button pressed: \(buttonName) → \(action.rawValue)")
-        executeAction(action)
+
+        let pressed = (intValue == 1)
+
+        // Debounce only on press — release just closes an existing hold.
+        if pressed {
+            RemoteInputHandler.lastProcessedButton = buttonName
+            RemoteInputHandler.lastProcessedTime = mach_absolute_time()
+        }
+
+        let action = menuBarManager?.getMapping(for: buttonName) ?? ButtonAction.none
+        if pressed {
+            print("🔘 Button pressed: \(buttonName) → \(action.rawValue)")
+        }
+        executeAction(action, button: buttonName, pressed: pressed)
     }
     
     private func handleSelectButton(pressed: Bool) {
@@ -191,7 +198,13 @@ class RemoteInputHandler {
     
     // MARK: - Action Execution
     
-    private func executeAction(_ action: ButtonAction) {
+    private func executeAction(_ action: ButtonAction, button: String, pressed: Bool) {
+        if action.requiresHold {
+            handleHoldAction(action, button: button, pressed: pressed)
+            return
+        }
+        // Tap actions fire once, on press only.
+        guard pressed else { return }
         switch action {
         case .none:
             break
@@ -205,35 +218,53 @@ class RemoteInputHandler {
             sendKey(kVK_Escape)
         case .ctrlC:
             sendKey(kVK_ANSI_C, flags: .maskControl)
-        case .spaceKey:
-            sendKey(kVK_Space)
-        case .rightCmd:
-            sendModifierTap(kVK_RightCommand, flag: .maskCommand)
-        case .rightOpt:
-            sendModifierTap(kVK_RightOption, flag: .maskAlternate)
+        case .spaceKey, .rightCmd, .rightOpt:
+            break // handled by handleHoldAction
         }
     }
 
-    private func sendKey(_ keyCode: Int, flags: CGEventFlags = []) {
-        let src = CGEventSource(stateID: .hidSystemState)
-        let down = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: true)
-        let up = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: false)
-        down?.flags = flags
-        up?.flags = flags
-        down?.post(tap: .cghidEventTap)
-        usleep(10000)
-        up?.post(tap: .cghidEventTap)
+    /// Press/release a virtual key mirroring the HID press duration (push-to-talk).
+    private func handleHoldAction(_ action: ButtonAction, button: String, pressed: Bool) {
+        let spec: (keyCode: Int, flags: CGEventFlags)
+        switch action {
+        case .spaceKey: spec = (kVK_Space,        [])
+        case .rightCmd: spec = (kVK_RightCommand, .maskCommand)
+        case .rightOpt: spec = (kVK_RightOption,  .maskAlternate)
+        default: return
+        }
+
+        if pressed {
+            // Defensive: if a prior release was missed, close the stale hold before opening a new one.
+            if let stale = heldKeys.removeValue(forKey: button) {
+                postKey(keyCode: stale.keyCode, flags: [], keyDown: false)
+            }
+            postKey(keyCode: spec.keyCode, flags: spec.flags, keyDown: true)
+            heldKeys[button] = spec
+        } else {
+            guard let held = heldKeys.removeValue(forKey: button) else { return }
+            postKey(keyCode: held.keyCode, flags: [], keyDown: false)
+        }
     }
 
-    private func sendModifierTap(_ keyCode: Int, flag: CGEventFlags) {
+    /// Called on device removal to avoid stuck modifiers if the remote disconnects mid-hold.
+    private func releaseAllHeldKeys() {
+        for (_, held) in heldKeys {
+            postKey(keyCode: held.keyCode, flags: [], keyDown: false)
+        }
+        heldKeys.removeAll()
+    }
+
+    private func postKey(keyCode: Int, flags: CGEventFlags, keyDown: Bool) {
         let src = CGEventSource(stateID: .hidSystemState)
-        let down = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: true)
-        down?.flags = flag
-        down?.post(tap: .cghidEventTap)
+        let event = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: keyDown)
+        event?.flags = flags
+        event?.post(tap: .cghidEventTap)
+    }
+
+    private func sendKey(_ keyCode: Int, flags: CGEventFlags = []) {
+        postKey(keyCode: keyCode, flags: flags, keyDown: true)
         usleep(10000)
-        let up = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: false)
-        up?.flags = []
-        up?.post(tap: .cghidEventTap)
+        postKey(keyCode: keyCode, flags: flags, keyDown: false)
     }
 }
 
