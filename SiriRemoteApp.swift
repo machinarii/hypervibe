@@ -1,6 +1,6 @@
 //
 //  SiriRemoteApp.swift
-//  Remotastic
+//  HyperVibe
 //
 //  Menu bar application for controlling Mac with Siri Remote
 //
@@ -20,7 +20,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var touchHandler: TouchHandler?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        print("🚀 Remotastic starting...")
+        print("🚀 HyperVibe starting...")
         
         // Run as menu bar app (no dock icon)
         NSApp.setActivationPolicy(.accessory)
@@ -53,6 +53,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Start touch handler for trackpad (before remote detection so we can wire the callback)
         touchHandler = TouchHandler(cursorController: cursorController)
         touchHandler?.scrollScale = menuBarManager.scrollSpeed.scale
+        touchHandler?.onSwipe = { [weak menuBarManager] direction in
+            menuBarManager?.executeSwipe(direction)
+        }
         touchHandler?.start()
         remoteInputHandler?.onButtonActivity = { [weak self] in
             self?.touchHandler?.tryReconnectTrackpad()

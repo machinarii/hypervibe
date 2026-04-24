@@ -1,6 +1,6 @@
 //
 //  main.swift
-//  Remotastic
+//  HyperVibe
 //
 //  Application entry point
 //

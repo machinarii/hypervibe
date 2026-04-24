@@ -1,6 +1,6 @@
 //
 //  RemoteInputHandler.swift
-//  Remotastic
+//  HyperVibe
 //
 //  Processes HID input events from Siri Remote
 //
@@ -220,6 +220,8 @@ class RemoteInputHandler {
             sendKey(kVK_ANSI_C, flags: .maskControl)
         case .spaceKey, .rightCmd, .rightOpt:
             break // handled by handleHoldAction
+        case .trackpadClick:
+            cursorController.performClick()
         }
     }
 
