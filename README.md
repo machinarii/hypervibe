@@ -40,11 +40,9 @@ Each physical Siri Remote button is independently assignable via the menu bar.
 | Menu button | Esc (Navigate back) |
 | TV button | Control + C (cancel prompt) |
 | Trackpad click | Left mouse click |
-| Siri/mic button | Space on hold (Claude voice dictation must be enabled |
-| Siri/mic button | Right ⌘ on hold (3rd party voice dictation like VoiceInk) |
-| Siri/mic button | Right ⌥ on hold (3rd party voice dictation like VoiceInk) |
+| Siri/mic button | Space on hold (Claude voice dictation must be enabled) |
 
-**Hold-Capable Buttons:** Push-to-talk actions require buttons that emit both press and release HID events. Only Play/Pause, Volume Up, Volume Down, and Siri buttons allow for both events.
+**Hold-Capable Buttons:** Push-to-talk actions require buttons that emit both press and release HID events. Only Play/Pause, Volume Up, Volume Down, and Siri buttons allow for both events. Also this button can trigger right command or option key for other dictation apps like [VoiceInk](https://github.com/Beingpax/VoiceInk).
 
 
 ### Swipe Gestures
