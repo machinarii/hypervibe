@@ -21,7 +21,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("🚀 HyperVibe starting...")
-        
+
+        // Install the volume-revert listener before any HID press can fire, so the first
+        // remote volume press is guarded — not just subsequent ones.
+        VolumeRevertGuard.shared.prewarm()
+
+        // Suppress OSDUIHelper (the volume/brightness/caps-lock bezel) for the session so
+        // AVRCP-origin volume changes don't render a HUD before we can revert. Restored on
+        // clean exit. This is system-wide while HyperVibe runs: keyboard volume/brightness
+        // HUDs are also suppressed until quit.
+        OSDHelperControl.suspend()
+
         // Run as menu bar app (no dock icon)
         NSApp.setActivationPolicy(.accessory)
         
@@ -101,6 +111,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         touchHandler?.stop()
         remoteDetector?.stopDetection()
         mediaKeyInterceptor?.stop()
+        OSDHelperControl.restore()
     }
     
     // MARK: - Media Key Handling
@@ -131,21 +142,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case .mute:       buttonName = "mute"
         }
 
-        // Debounce: if the HID path just handled this button, don't double-fire.
+        // If the HID path just handled this exact button, the session tap is echoing our
+        // remote press — consume it so apps don't also see it. Anything else (keyboard F7/F8,
+        // F10/F11/F12, or another BT input) is not ours: pass through so rcd and apps get it.
         if RemoteInputHandler.lastProcessedButton == buttonName {
             let timeSinceLastProcess = Self.machDeltaToSeconds(from: RemoteInputHandler.lastProcessedTime)
             if timeSinceLastProcess < 0.2 {
                 return true
             }
         }
-
-        let action = menuBarManager.getMapping(for: buttonName)
-        if action != .none {
-            menuBarManager.executeAction(action.rawValue)
-        }
-        // Always consume — no action in this app corresponds to a system media key anymore,
-        // so we never want macOS's default media handler to fire.
-        return true
+        return false
     }
     
     // MARK: - Permissions
@@ -157,3 +163,67 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         _ = AXIsProcessTrustedWithOptions(options)
     }
 }
+
+/// Suppresses `com.apple.OSDUIHelper` (the system bezel renderer) for the session by
+/// disabling its LaunchAgent and killing the current instance. Under SIP, `bootout` is
+/// blocked but `disable` is allowed — `disable` prevents Mach-service spawn, so once we
+/// kill the running helper, volume/brightness IPCs from coreaudiod no longer respawn it.
+/// On clean exit we re-enable it. A crash leaves it disabled until next login or manual
+/// `launchctl enable gui/$UID/com.apple.OSDUIHelper`.
+///
+/// Trade-off: while HyperVibe runs, keyboard volume/brightness/caps-lock bezels are also
+/// suppressed system-wide. Accepted to stop the remote's BT-AVRCP volume change from
+/// rendering a bezel before our listener can revert the level.
+enum OSDHelperControl {
+    private static var disabled = false
+
+    static func suspend() {
+        let service = "gui/\(getuid())/com.apple.OSDUIHelper"
+        let (disableStatus, disableErr) = launchctl(["disable", service])
+        guard disableStatus == 0 else {
+            print("⚠️ Could not disable OSDUIHelper (launchctl exit=\(disableStatus)): \(disableErr)")
+            return
+        }
+        disabled = true
+        // Kill the current instance so the disable actually takes effect — disable only
+        // prevents future spawns.
+        let kill = Process()
+        kill.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+        kill.arguments = ["-9", "OSDUIHelper"]
+        kill.standardOutput = Pipe()
+        kill.standardError = Pipe()
+        try? kill.run()
+        kill.waitUntilExit()
+        print("🔇 OSDUIHelper disabled + killed (no system bezels until quit)")
+    }
+
+    static func restore() {
+        guard disabled else { return }
+        let (status, err) = launchctl(["enable", "gui/\(getuid())/com.apple.OSDUIHelper"])
+        if status == 0 {
+            print("🔊 OSDUIHelper re-enabled")
+        } else {
+            print("⚠️ Could not re-enable OSDUIHelper (launchctl exit=\(status)): \(err) — run `launchctl enable gui/$(id -u)/com.apple.OSDUIHelper` to restore manually")
+        }
+        disabled = false
+    }
+
+    private static func launchctl(_ args: [String]) -> (Int32, String) {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        proc.arguments = args
+        let errPipe = Pipe()
+        proc.standardOutput = Pipe()
+        proc.standardError = errPipe
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            let data = errPipe.fileHandleForReading.readDataToEndOfFile()
+            let s = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return (proc.terminationStatus, s)
+        } catch {
+            return (-1, "\(error)")
+        }
+    }
+}
+

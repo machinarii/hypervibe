@@ -23,7 +23,8 @@ let package = Package(
                 "CursorController.swift",
                 "MediaController.swift",
                 "MediaKeyInterceptor.swift",
-                "TouchHandler.swift"
+                "TouchHandler.swift",
+                "SystemVolume.swift"
             ],
             linkerSettings: [
                 .linkedFramework("IOKit"),
