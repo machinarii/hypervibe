@@ -41,12 +41,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Initialize controllers
         let cursorController = CursorController()
-        let mediaController = MediaController()
-        menuBarManager.mediaController = mediaController
-        
+
         remoteInputHandler = RemoteInputHandler(
             cursorController: cursorController,
-            mediaController: mediaController,
             menuBarManager: menuBarManager
         )
         
@@ -84,8 +81,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return self.handleInterceptedMediaKey(keyType)
         }
         mediaKeyInterceptor?.start()
-        
-        // Wire up settings changes
     }
     
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

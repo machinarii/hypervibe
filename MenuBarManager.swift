@@ -102,13 +102,7 @@ class MenuBarManager {
 
     // Scroll speed (used for trackpad scroll scale; no menu, native multitouch)
     private(set) var scrollSpeed: ScrollSpeed = .medium
-    
-    // Callback for when mappings change
-    var onMappingsChanged: (([String: ButtonAction]) -> Void)?
-    
-    /// Set by app delegate so menu bar can delegate media actions to MediaController (one path for CLI and app).
-    var mediaController: MediaController?
-    
+
     init(statusItem: NSStatusItem) {
         self.statusItem = statusItem
         self.menu = NSMenu()
@@ -176,7 +170,6 @@ class MenuBarManager {
             toSave[button] = action.rawValue
         }
         UserDefaults.standard.set(toSave, forKey: "buttonMappings")
-        onMappingsChanged?(buttonMappings)
     }
     
     /// Draw a walkie-talkie silhouette for the menu-bar icon. Template image → auto-tinted by macOS.
@@ -484,18 +477,6 @@ class MenuBarManager {
         
         let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: cgPos, mouseButton: .left)
         let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: cgPos, mouseButton: .left)
-        down?.post(tap: .cghidEventTap)
-        usleep(10000)
-        up?.post(tap: .cghidEventTap)
-    }
-    
-    private func performRightClick() {
-        let pos = NSEvent.mouseLocation
-        let screenH = NSScreen.main?.frame.height ?? 0
-        let cgPos = CGPoint(x: pos.x, y: screenH - pos.y)
-        
-        let down = CGEvent(mouseEventSource: nil, mouseType: .rightMouseDown, mouseCursorPosition: cgPos, mouseButton: .right)
-        let up = CGEvent(mouseEventSource: nil, mouseType: .rightMouseUp, mouseCursorPosition: cgPos, mouseButton: .right)
         down?.post(tap: .cghidEventTap)
         usleep(10000)
         up?.post(tap: .cghidEventTap)

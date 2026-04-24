@@ -10,30 +10,6 @@ import CoreGraphics
 import AppKit
 import Darwin
 
-// #region agent log
-private let debugLogPath = "/Users/laurent/Documents/Remotastic/.cursor/debug.log"
-private func debugLog(_ message: String, data: [String: Any] = [:], hypothesisId: String = "") {
-    let payload: [String: Any] = [
-        "timestamp": Int(Date().timeIntervalSince1970 * 1000),
-        "location": "TouchHandler",
-        "message": message,
-        "data": data,
-        "sessionId": "debug-session",
-        "hypothesisId": hypothesisId
-    ]
-    guard let json = try? JSONSerialization.data(withJSONObject: payload),
-          let line = String(data: json, encoding: .utf8) else { return }
-    if !FileManager.default.fileExists(atPath: debugLogPath) {
-        FileManager.default.createFile(atPath: debugLogPath, contents: nil)
-    }
-    guard let h = FileHandle(forUpdatingAtPath: debugLogPath) else { return }
-    h.seekToEndOfFile()
-    h.write(line.data(using: .utf8)!)
-    h.write("\n".data(using: .utf8)!)
-    h.closeFile()
-}
-// #endregion
-
 private func touchCallback(device: MTDevice?,
                            touches: UnsafeMutablePointer<MTTouch>?,
                            numTouches: Int,
@@ -93,7 +69,6 @@ class TouchHandler {
     private let reconnectInterval: TimeInterval = 2.0
     private let idleTimeout: TimeInterval = 90.0
     private let touchStarvationThreshold: TimeInterval = 15.0
-    private var handleTouchesCallCount: Int = 0
 
     init(cursorController: CursorController) {
         self.cursorController = cursorController
@@ -172,43 +147,21 @@ class TouchHandler {
     }
     
     private func findAndStartDevice() {
-        guard let cfArray = MTDeviceCreateList()?.takeRetainedValue() else {
-            // #region agent log
-            debugLog("findAndStartDevice: list nil", data: [:], hypothesisId: "B")
-            // #endregion
-            return
-        }
+        guard let cfArray = MTDeviceCreateList()?.takeRetainedValue() else { return }
         let deviceList = cfArray as [MTDevice]
-        let deviceCount = deviceList.count
-        var foundNonBuiltin = false
         // Find non-built-in device (Siri Remote)
         for dev in deviceList {
             if !MTDeviceIsBuiltIn(dev) {
-                foundNonBuiltin = true
-                // #region agent log
-                debugLog("findAndStartDevice: starting non-built-in", data: ["deviceCount": deviceCount], hypothesisId: "B")
-                // #endregion
                 startDevice(dev)
                 return
             }
         }
         // Fallback: use second device if available
         if deviceList.count > 1 {
-            // #region agent log
-            debugLog("findAndStartDevice: starting second device", data: ["deviceCount": deviceCount], hypothesisId: "B")
-            // #endregion
             startDevice(deviceList[1])
-        } else {
-            // #region agent log
-            debugLog("findAndStartDevice: no device to start", data: ["deviceCount": deviceCount, "foundNonBuiltin": foundNonBuiltin], hypothesisId: "B")
-            // #endregion
+        } else if device != nil {
             // Clear stale ref so next checkAndReconnect will retry when the remote reappears in the list.
-            if device != nil {
-                // #region agent log
-                debugLog("findAndStartDevice: clearing stale device", data: ["deviceCount": deviceCount], hypothesisId: "B")
-                // #endregion
-                stopDevice()
-            }
+            stopDevice()
         }
     }
     
@@ -221,9 +174,6 @@ class TouchHandler {
         MTDeviceStart(dev, 0)
         // Reset so we don't immediately re-enter starvation and restart every 2s when no touches yet.
         lastTouchTime = mach_absolute_time()
-        // #region agent log
-        debugLog("startDevice: started", data: [:], hypothesisId: "C")
-        // #endregion
         print("📱 Trackpad device connected and started")
     }
     
@@ -252,61 +202,26 @@ class TouchHandler {
     private func checkAndReconnect() {
         let timeSinceLastTouch = lastTouchTime == 0 ? 0 : Self.machDeltaToSeconds(from: lastTouchTime)
 
-        guard let cfArray = MTDeviceCreateList()?.takeRetainedValue() else {
-            // #region agent log
-            debugLog("checkAndReconnect: MTDeviceCreateList nil", data: [:], hypothesisId: "A")
-            // #endregion
-            return
-        }
+        guard let cfArray = MTDeviceCreateList()?.takeRetainedValue() else { return }
         let deviceCount = CFArrayGetCount(cfArray)
-        let hasDevice = device != nil
-        let isRunning = device.map { MTDeviceIsRunning($0) } ?? false
 
         // Restart if we have a device ref but the driver stopped (e.g. after remote sleep).
         if let dev = device, !MTDeviceIsRunning(dev) {
-            // #region agent log
-            debugLog("checkAndReconnect: restart (not running)", data: ["timeSinceLastTouch": timeSinceLastTouch, "deviceCount": deviceCount], hypothesisId: "A")
-            // #endregion
             findAndStartDevice()
             return
         }
         // Restart if we have a device but no touch events for a while (remote slept; no "remote wake" API).
         if device != nil && timeSinceLastTouch > touchStarvationThreshold {
-            // #region agent log
-            debugLog("checkAndReconnect: restart (starvation)", data: ["timeSinceLastTouch": timeSinceLastTouch, "deviceCount": deviceCount, "threshold": touchStarvationThreshold], hypothesisId: "A")
-            // #endregion
             findAndStartDevice()
             return
         }
-        // #region agent log
-        if device != nil && timeSinceLastTouch > 5 && timeSinceLastTouch <= touchStarvationThreshold {
-            debugLog("checkAndReconnect: waiting for starvation", data: ["timeSinceLastTouch": timeSinceLastTouch, "threshold": touchStarvationThreshold], hypothesisId: "A")
-        }
-        // #endregion
-        let shouldReconnect = device == nil || (timeSinceLastTouch > idleTimeout && deviceCount > 1)
-        let willTryReconnect = shouldReconnect && (device == nil || deviceCount > 1)
-        if willTryReconnect {
-            // #region agent log
-            debugLog("checkAndReconnect: restart (willReconnect)", data: ["timeSinceLastTouch": timeSinceLastTouch, "deviceCount": deviceCount, "deviceNil": device == nil], hypothesisId: "A")
-            // #endregion
+        if device == nil || (timeSinceLastTouch > idleTimeout && deviceCount > 1) {
             findAndStartDevice()
-        } else {
-            // #region agent log
-            if hasDevice && timeSinceLastTouch > 10 {
-                debugLog("checkAndReconnect: no restart", data: ["timeSinceLastTouch": timeSinceLastTouch, "deviceCount": deviceCount, "isRunning": isRunning], hypothesisId: "A")
-            }
-            // #endregion
         }
     }
     
     func handleTouches(touches: UnsafeMutablePointer<MTTouch>?, count: Int, timestamp: Double) {
         lastTouchTime = mach_absolute_time()
-        // #region agent log
-        handleTouchesCallCount += 1
-        if handleTouchesCallCount % 100 == 1 || handleTouchesCallCount <= 3 {
-            debugLog("handleTouches: callback", data: ["count": count, "callCount": handleTouchesCallCount], hypothesisId: "C")
-        }
-        // #endregion
 
         guard count > 0, let touchPtr = touches else {
             // Touch ended
