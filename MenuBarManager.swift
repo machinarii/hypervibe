@@ -11,18 +11,14 @@ import Carbon.HIToolbox
 // Button actions that can be assigned
 enum ButtonAction: String, CaseIterable {
     case none = "None"
-    case playPause = "Play/Pause"
-    case nextTrack = "Next Track"
-    case previousTrack = "Previous Track"
-    case volumeUp = "Volume Up"
-    case volumeDown = "Volume Down"
-    case mute = "Mute"
-    case click = "Mouse Click"
-    case rightClick = "Right Click"
-    case escape = "Escape"
-    case space = "Space"
-    case enter = "Enter"
-    case missionControl = "Mission Control"
+    case enterKey = "Enter: Submit prompt"
+    case upKey = "Up: Navigate Up"
+    case downKey = "Down: Navigate Down"
+    case escKey = "Esc: Navigate Back"
+    case ctrlC = "Control + C: Cancel Prompt"
+    case spaceKey = "Space: Claude Voice Dictation"
+    case rightCmd = "Right Command: 3rd-party Voice Dictation"
+    case rightOpt = "Right Option: 3rd-party Voice Dictation"
 }
 
 // Scroll speed options
@@ -68,42 +64,40 @@ class MenuBarManager {
     }
     
     private func loadMappings() {
-        // Default mappings (only used on first launch)
+        // Default mappings (only used on first launch / after schema upgrade)
         let defaultMappings: [String: ButtonAction] = [
-            "playPause": .playPause,
-            "menu": .missionControl,
-            "select": .click,
-            "volumeUp": .volumeUp,
-            "volumeDown": .volumeDown,
-            "siri": .space,
-            "tv": .rightClick
+            "playPause": .enterKey,
+            "menu": .escKey,
+            "select": .enterKey,
+            "volumeUp": .upKey,
+            "volumeDown": .downKey,
+            "siri": .spaceKey,
+            "tv": .ctrlC
         ]
-        
-        // Load saved mappings from UserDefaults
+
+        // Schema version bump: old media-key actions are no longer representable.
+        // On upgrade, drop saved mappings and apply the new defaults.
+        let currentSchema = 3
+        let savedSchema = UserDefaults.standard.integer(forKey: "buttonMappingsSchema")
+        if savedSchema < currentSchema {
+            UserDefaults.standard.removeObject(forKey: "buttonMappings")
+            UserDefaults.standard.set(currentSchema, forKey: "buttonMappingsSchema")
+        }
+
         if let saved = UserDefaults.standard.dictionary(forKey: "buttonMappings") as? [String: String] {
-            // User has saved mappings - use those (migrate old "Toggle Trackpad Mode" to .escape)
             for (button, actionRaw) in saved {
                 if let action = ButtonAction(rawValue: actionRaw) {
                     buttonMappings[button] = action
-                } else if actionRaw == "Toggle Trackpad Mode" {
-                    buttonMappings[button] = .escape
                 }
             }
-            // Fill in any missing buttons with defaults
             for (button, action) in defaultMappings {
                 if buttonMappings[button] == nil {
                     buttonMappings[button] = action
                 }
             }
-            // One-time migration: Menu was default Escape; prefer Mission Control for Expose
-            if buttonMappings["menu"] == .escape {
-                buttonMappings["menu"] = .missionControl
-                saveMappings()
-            }
         } else {
-            // First launch - use defaults
             buttonMappings = defaultMappings
-            saveMappings() // Save defaults immediately
+            saveMappings()
         }
     }
     
@@ -250,41 +244,29 @@ class MenuBarManager {
     /// Execute an action by name
     func executeAction(_ actionName: String) {
         guard let action = ButtonAction(rawValue: actionName) else { return }
-        
+
         switch action {
         case .none:
             break
-        case .playPause:
-            mediaController?.sendMediaKey(.playPause)
-        case .nextTrack:
-            mediaController?.sendMediaKey(.next)
-        case .previousTrack:
-            mediaController?.sendMediaKey(.previous)
-        case .volumeUp:
-            mediaController?.sendMediaKey(.volumeUp)
-        case .volumeDown:
-            mediaController?.sendMediaKey(.volumeDown)
-        case .mute:
-            mediaController?.sendMediaKey(.mute)
-        case .click:
-            performClick()
-        case .rightClick:
-            performRightClick()
-        case .escape:
-            sendKey(kVK_Escape)
-        case .space:
-            sendKey(kVK_Space)
-        case .enter:
+        case .enterKey:
             sendKey(kVK_Return)
-        case .missionControl:
-            sendMissionControlKey()
+        case .upKey:
+            sendKey(kVK_UpArrow)
+        case .downKey:
+            sendKey(kVK_DownArrow)
+        case .escKey:
+            sendKey(kVK_Escape)
+        case .ctrlC:
+            sendKey(kVK_ANSI_C, flags: .maskControl)
+        case .spaceKey:
+            sendKey(kVK_Space)
+        case .rightCmd:
+            sendModifierTap(kVK_RightCommand, flag: .maskCommand)
+        case .rightOpt:
+            sendModifierTap(kVK_RightOption, flag: .maskAlternate)
         }
     }
-    
-    private func sendMissionControlKey() {
-        openMissionControl()
-    }
-    
+
     private func performClick() {
         let pos = NSEvent.mouseLocation
         let screenH = NSScreen.main?.frame.height ?? 0
@@ -309,11 +291,27 @@ class MenuBarManager {
         up?.post(tap: .cghidEventTap)
     }
     
-    private func sendKey(_ keyCode: Int) {
+    private func sendKey(_ keyCode: Int, flags: CGEventFlags = []) {
         let src = CGEventSource(stateID: .hidSystemState)
-        CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: true)?.post(tap: .cghidEventTap)
+        let down = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: true)
+        let up = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: false)
+        down?.flags = flags
+        up?.flags = flags
+        down?.post(tap: .cghidEventTap)
         usleep(10000)
-        CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: false)?.post(tap: .cghidEventTap)
+        up?.post(tap: .cghidEventTap)
+    }
+
+    /// Tap a modifier key alone (e.g. Right Command) — used to trigger push-to-talk dictation.
+    private func sendModifierTap(_ keyCode: Int, flag: CGEventFlags) {
+        let src = CGEventSource(stateID: .hidSystemState)
+        let down = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: true)
+        down?.flags = flag
+        down?.post(tap: .cghidEventTap)
+        usleep(10000)
+        let up = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: false)
+        up?.flags = []
+        up?.post(tap: .cghidEventTap)
     }
     
     @objc private func quitApp() {

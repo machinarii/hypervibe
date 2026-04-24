@@ -123,52 +123,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func handleInterceptedMediaKey(_ keyType: MediaKeyInterceptor.MediaKeyType) -> Bool {
         let buttonName: String
-        let defaultAction: String
-        
         switch keyType {
-        case .playPause:
-            buttonName = "playPause"
-            defaultAction = "Play/Pause"
-        case .next:
-            buttonName = "nextTrack"
-            defaultAction = "Next Track"
-        case .previous:
-            buttonName = "prevTrack"
-            defaultAction = "Previous Track"
-        case .volumeUp:
-            buttonName = "volumeUp"
-            defaultAction = "Volume Up"
-        case .volumeDown:
-            buttonName = "volumeDown"
-            defaultAction = "Volume Down"
-        case .mute:
-            return false
+        case .playPause:  buttonName = "playPause"
+        case .next:       buttonName = "nextTrack"
+        case .previous:   buttonName = "prevTrack"
+        case .volumeUp:   buttonName = "volumeUp"
+        case .volumeDown: buttonName = "volumeDown"
+        case .mute:       buttonName = "mute"
         }
-        
-        // Check if RemoteInputHandler just processed this button (prevent double-processing)
+
+        // Debounce: if the HID path just handled this button, don't double-fire.
         if RemoteInputHandler.lastProcessedButton == buttonName {
             let timeSinceLastProcess = Self.machDeltaToSeconds(from: RemoteInputHandler.lastProcessedTime)
-            if timeSinceLastProcess < 0.2 { // Within 200ms debounce window
-                // RemoteInputHandler already handled this, consume the event but don't process again
+            if timeSinceLastProcess < 0.2 {
                 return true
             }
         }
-        
+
         let action = menuBarManager.getMapping(for: buttonName)
-        
-        if action == .none {
-            return true // Consume but do nothing
+        if action != .none {
+            menuBarManager.executeAction(action.rawValue)
         }
-        
-        if action.rawValue == defaultAction {
-            // In .app, Play/Pause is also sent over AVRCP; we don't send from HID there. Let system handle once.
-            if keyType == .playPause && Bundle.main.bundlePath.hasSuffix(".app") {
-                return false // Let system handle (AVRCP); we don't send from HID in .app
-            }
-            return true // Consume; HID path is the single source (CLI or non–play/pause)
-        }
-        
-        menuBarManager.executeAction(action.rawValue)
+        // Always consume — no action in this app corresponds to a system media key anymore,
+        // so we never want macOS's default media handler to fire.
         return true
     }
     

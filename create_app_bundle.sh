@@ -84,6 +84,18 @@ EOF
 # Make executable
 chmod +x "${APP_BUNDLE}/Contents/MacOS/$APP_NAME"
 
+# Sign with hardened runtime + entitlements. Required on modern macOS (14+) for
+# IOHIDManager to deliver Bluetooth HID devices like the Siri Remote to the app.
+# Ad-hoc (`--sign -`) is used; for distribution, swap in a Developer ID identity.
+if [ -f "Remotastic.entitlements" ]; then
+    echo "Signing with hardened runtime + entitlements..."
+    codesign --force --options=runtime \
+        --entitlements "Remotastic.entitlements" \
+        --sign - \
+        "${APP_BUNDLE}"
+    codesign -dvv "${APP_BUNDLE}" 2>&1 | grep -E "(flags|Identifier)" || true
+fi
+
 echo ""
 echo "✓ App bundle created: $APP_BUNDLE"
 echo ""
