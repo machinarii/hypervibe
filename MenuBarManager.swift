@@ -19,7 +19,21 @@ enum ButtonAction: String, CaseIterable {
     case spaceKey = "Space: Claude Voice Dictation"
     case rightCmd = "Right Command: 3rd-party Voice Dictation"
     case rightOpt = "Right Option: 3rd-party Voice Dictation"
+
+    /// Push-to-talk dictation needs the virtual key held for the full press duration.
+    /// Only a subset of HID buttons emit reliable release events, so these actions are
+    /// only offered for hold-capable buttons.
+    var requiresHold: Bool {
+        switch self {
+        case .spaceKey, .rightCmd, .rightOpt: return true
+        default: return false
+        }
+    }
 }
+
+/// HID buttons whose driver emits both press (value=1) and release (value=0) — verified via /tmp/remotastic.log.
+/// menu/tv/select are excluded: menu/tv are press-only on the Siri Remote, select is handled separately for click/drag.
+let holdCapableButtons: Set<String> = ["playPause", "volumeUp", "volumeDown", "siri"]
 
 // Scroll speed options
 enum ScrollSpeed: String, CaseIterable {
@@ -95,6 +109,10 @@ class MenuBarManager {
                     buttonMappings[button] = action
                 }
             }
+            // Defensive: if a hold-required action got persisted against a tap-only button, reset to none.
+            for (button, action) in buttonMappings where action.requiresHold && !holdCapableButtons.contains(button) {
+                buttonMappings[button] = ButtonAction.none
+            }
         } else {
             buttonMappings = defaultMappings
             saveMappings()
@@ -168,20 +186,23 @@ class MenuBarManager {
         for (key, label) in buttons {
             let buttonItem = NSMenuItem(title: label, action: nil, keyEquivalent: "")
             let actionSubmenu = NSMenu()
-            
+            let canHold = holdCapableButtons.contains(key)
+
             for action in ButtonAction.allCases {
+                // Voice-dictation actions require press+release tracking; hide them on tap-only buttons.
+                if action.requiresHold && !canHold { continue }
+
                 let actionItem = NSMenuItem(title: action.rawValue, action: #selector(changeMapping(_:)), keyEquivalent: "")
                 actionItem.target = self
                 actionItem.representedObject = (key, action)
-                
-                // Mark current selection
+
                 if buttonMappings[key] == action {
                     actionItem.state = .on
                 }
-                
+
                 actionSubmenu.addItem(actionItem)
             }
-            
+
             buttonItem.submenu = actionSubmenu
             mappingsSubmenu.addItem(buttonItem)
         }
