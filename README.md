@@ -1,3 +1,5 @@
+<img src="banner.png" alt="HyperVibe — a walkie-talkie for Claude Code">
+
 # HyperVibe
 
 A macOS menu-bar app that turns a paired Apple TV Siri Remote into **a walkie-talkie for Claude Code**.
@@ -15,6 +17,8 @@ Tested with the 1st-gen Siri Remote (Model A1513).
 Each physical Siri Remote button is independently assignable via the menu bar.
 
 <img src="siri-remote-button-mapping-default.png" alt="Default Siri Remote button mapping" width="50%">
+
+<img src="screenshot-button-mapping.png" alt="Button Mappings menu screenshot" width="30%">
 
 **Default Button Mapping (Customizable):**
 - Menu → Esc
@@ -44,6 +48,8 @@ Each physical Siri Remote button is independently assignable via the menu bar.
 Four independently configurable single-finger swipe directions on the trackpad surface. Detection is velocity-gated: **distance ≥ 35%** of trackpad, **duration < 350 ms**, **dominant axis ≥ 2×** the other. Slow drags continue to move the cursor; only deliberate flicks trigger actions.
 
 <img src="siri-remote-gesture-mapping.png" alt="Siri Remote swipe gesture mapping" width="50%">
+
+<img src="screenshot-swipe-mapping.png" alt="Swipe Gestures menu screenshot" width="30%">
 
 **Default Gesture Mapping (Customizable):**
 - Swipe Up → `/usage`

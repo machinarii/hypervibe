@@ -10,7 +10,6 @@ import Carbon.HIToolbox
 
 // Button actions that can be assigned
 enum ButtonAction: String, CaseIterable {
-    case none = "None"
     case enterKey = "Enter: Submit prompt"
     case upKey = "Up: Navigate Up"
     case downKey = "Down: Navigate Down"
@@ -19,7 +18,8 @@ enum ButtonAction: String, CaseIterable {
     case spaceKey = "Space: Claude Voice Dictation"
     case rightCmd = "Right Command: 3rd-party Voice Dictation"
     case rightOpt = "Right Option: 3rd-party Voice Dictation"
-    case trackpadClick = "Trackpad Click"
+    case trackpadClick = "Mouse Click"
+    case none = "None"
 
     /// Push-to-talk dictation needs the virtual key held for the full press duration.
     /// Only a subset of HID buttons emit reliable release events, so these actions are
@@ -262,6 +262,8 @@ class MenuBarManager {
             for action in ButtonAction.allCases {
                 // Voice-dictation actions require press+release tracking; hide them on tap-only buttons.
                 if action.requiresHold && !canHold { continue }
+                // Mouse Click is only meaningful for the trackpad click button.
+                if action == .trackpadClick && key != "select" { continue }
 
                 let actionItem = NSMenuItem(title: action.rawValue, action: #selector(changeMapping(_:)), keyEquivalent: "")
                 actionItem.target = self
@@ -474,14 +476,14 @@ class MenuBarManager {
         let pos = NSEvent.mouseLocation
         let screenH = NSScreen.main?.frame.height ?? 0
         let cgPos = CGPoint(x: pos.x, y: screenH - pos.y)
-        
+
         let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: cgPos, mouseButton: .left)
         let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: cgPos, mouseButton: .left)
         down?.post(tap: .cghidEventTap)
         usleep(10000)
         up?.post(tap: .cghidEventTap)
     }
-    
+
     private func sendKey(_ keyCode: Int, flags: CGEventFlags = []) {
         let src = CGEventSource(stateID: .hidSystemState)
         let down = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: true)
