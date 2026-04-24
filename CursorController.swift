@@ -17,16 +17,6 @@ class CursorController {
     var isDragging: Bool = false
     var isClickActive: Bool = false
     
-    /// System alert sound for key press and tap-to-click (one path for CLI and app).
-    static func playKeyPressFeedback() {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { playKeyPressFeedback() }
-            return
-        }
-        // NSSound.beep() plays user's system alert sound (documented Cocoa API).
-        NSSound.beep()
-    }
-    
     // MARK: - Helper Functions
     
     /// Finds the screen containing the given point

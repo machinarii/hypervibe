@@ -55,21 +55,22 @@ class RemoteInputHandler {
         
         // Seize device to prevent system from handling events
         let openResult = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice))
-        
+
         if openResult == kIOReturnSuccess {
+            rmDebug(String(format: "🔒 SEIZED HID device (vendor=0x%X product=0x%X)",
+                  IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? Int ?? 0,
+                  IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? Int ?? 0))
             IOHIDDeviceRegisterInputValueCallback(device, inputValueCallback, Unmanaged.passUnretained(self).toOpaque())
             IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
             devices.append(device)
             isFirstPressAfterConnection = true
-            CursorController.playKeyPressFeedback()
         } else {
-            // Fallback: open without seize
+            rmDebug(String(format: "⚠️ FAILED to seize HID device (IOReturn=0x%X) — opening unseized", openResult))
             if IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess {
                 IOHIDDeviceRegisterInputValueCallback(device, inputValueCallback, Unmanaged.passUnretained(self).toOpaque())
                 IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
                 devices.append(device)
                 isFirstPressAfterConnection = true
-                CursorController.playKeyPressFeedback()
             }
         }
     }
@@ -79,8 +80,11 @@ class RemoteInputHandler {
         let usagePage = IOHIDElementGetUsagePage(element)
         let usage = IOHIDElementGetUsage(element)
         let intValue = IOHIDValueGetIntegerValue(value)
-        
-        guard let buttonName = identifyButton(page: usagePage, usage: usage) else { return }
+
+        let identified = identifyButton(page: usagePage, usage: usage)
+        rmDebug(String(format: "🎮 HID event: page=0x%X usage=0x%X value=%d → %@",
+                       usagePage, usage, intValue, identified ?? "<unmapped>"))
+        guard let buttonName = identified else { return }
         
         // Any button activity may cause the remote to re-enumerate; re-scan MT so trackpad can reconnect.
         onButtonActivity?()
@@ -107,9 +111,6 @@ class RemoteInputHandler {
         
         let action = menuBarManager?.getMapping(for: buttonName) ?? .none
         print("🔘 Button pressed: \(buttonName) → \(action.rawValue)")
-        if action != .none {
-            CursorController.playKeyPressFeedback()
-        }
         executeAction(action)
     }
     
@@ -137,7 +138,6 @@ class RemoteInputHandler {
                 cursorController.mouseUp()
             } else {
                 print("🔘 Select button: Click")
-                CursorController.playKeyPressFeedback()
                 cursorController.performClick()
             }
             isDragging = false
@@ -195,45 +195,45 @@ class RemoteInputHandler {
         switch action {
         case .none:
             break
-        case .playPause:
-            // In .app the remote also sends Play/Pause over AVRCP; skip our send so only AVRCP fires (once).
-            if !Bundle.main.bundlePath.hasSuffix(".app") {
-                mediaController.sendMediaKey(.playPause)
-            }
-        case .nextTrack:
-            mediaController.sendMediaKey(.next)
-        case .previousTrack:
-            mediaController.sendMediaKey(.previous)
-        case .volumeUp:
-            mediaController.sendMediaKey(.volumeUp)
-        case .volumeDown:
-            mediaController.sendMediaKey(.volumeDown)
-        case .mute:
-            mediaController.sendMediaKey(.mute)
-        case .click:
-            cursorController.performClick()
-        case .rightClick:
-            cursorController.performRightClick()
-        case .escape:
-            sendKey(kVK_Escape)
-        case .space:
-            sendKey(kVK_Space)
-        case .enter:
+        case .enterKey:
             sendKey(kVK_Return)
-        case .missionControl:
-            sendMissionControlKey()
+        case .upKey:
+            sendKey(kVK_UpArrow)
+        case .downKey:
+            sendKey(kVK_DownArrow)
+        case .escKey:
+            sendKey(kVK_Escape)
+        case .ctrlC:
+            sendKey(kVK_ANSI_C, flags: .maskControl)
+        case .spaceKey:
+            sendKey(kVK_Space)
+        case .rightCmd:
+            sendModifierTap(kVK_RightCommand, flag: .maskCommand)
+        case .rightOpt:
+            sendModifierTap(kVK_RightOption, flag: .maskAlternate)
         }
     }
-    
-    private func sendMissionControlKey() {
-        openMissionControl()
-    }
-    
-    private func sendKey(_ keyCode: Int) {
+
+    private func sendKey(_ keyCode: Int, flags: CGEventFlags = []) {
         let src = CGEventSource(stateID: .hidSystemState)
-        CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: true)?.post(tap: .cghidEventTap)
+        let down = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: true)
+        let up = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: false)
+        down?.flags = flags
+        up?.flags = flags
+        down?.post(tap: .cghidEventTap)
         usleep(10000)
-        CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: false)?.post(tap: .cghidEventTap)
+        up?.post(tap: .cghidEventTap)
+    }
+
+    private func sendModifierTap(_ keyCode: Int, flag: CGEventFlags) {
+        let src = CGEventSource(stateID: .hidSystemState)
+        let down = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: true)
+        down?.flags = flag
+        down?.post(tap: .cghidEventTap)
+        usleep(10000)
+        let up = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: false)
+        up?.flags = []
+        up?.post(tap: .cghidEventTap)
     }
 }
 

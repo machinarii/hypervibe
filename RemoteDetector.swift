@@ -5,8 +5,24 @@
 //  Detects Siri Remote via IOKit HID
 //
 
+import Foundation
 import IOKit
 import IOKit.hid
+
+/// Append diagnostic line to /tmp/remotastic.log (unified-log redacts NSLog under hardened runtime).
+func rmDebug(_ msg: String) {
+    let line = "\(Date()) \(msg)\n"
+    if let data = line.data(using: .utf8) {
+        let path = "/tmp/remotastic.log"
+        if let fh = FileHandle(forWritingAtPath: path) {
+            fh.seekToEndOfFile()
+            fh.write(data)
+            try? fh.close()
+        } else {
+            try? data.write(to: URL(fileURLWithPath: path))
+        }
+    }
+}
 
 class RemoteDetector {
     private var manager: IOHIDManager?
@@ -31,19 +47,37 @@ class RemoteDetector {
     }
     
     func startDetection() {
+        rmDebug(String(format: "🛰 starting HID detection (vendor=0x%X)", appleVendorID))
         manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-        guard let manager = manager else { return }
-        
-        let matchingDict: [String: Any] = [kIOHIDVendorIDKey: appleVendorID]
-        IOHIDManagerSetDeviceMatching(manager, matchingDict as CFDictionary)
-        
+        guard let manager = manager else {
+            rmDebug("⚠️ IOHIDManagerCreate returned nil")
+            return
+        }
+
+        // SiriMote uses IOHIDManagerSetDeviceMatchingMultiple with per-interface dicts.
+        // The Siri Remote A1513 exposes 3 HID interfaces (consumer, game controls, vendor),
+        // and the singular variant with vendor-only matching does not enumerate them on
+        // recent macOS BLE HID stacks.
+        let matchingDicts: [[String: Any]] = [
+            [kIOHIDVendorIDKey: appleVendorID, kIOHIDPrimaryUsagePageKey: 0x0C],   // Consumer Page
+            [kIOHIDVendorIDKey: appleVendorID, kIOHIDPrimaryUsagePageKey: 0x0D],   // Digitizer / Game Controls
+            [kIOHIDVendorIDKey: appleVendorID, kIOHIDPrimaryUsagePageKey: 0xFF00], // Apple vendor-defined
+            [kIOHIDVendorIDKey: appleVendorID, kIOHIDPrimaryUsagePageKey: 0x01],   // Generic Desktop (kept for keyboards/trackpads)
+        ]
+        IOHIDManagerSetDeviceMatchingMultiple(manager, matchingDicts as CFArray)
+
         IOHIDManagerRegisterDeviceMatchingCallback(manager, deviceAddedCallback, Unmanaged.passUnretained(self).toOpaque())
         IOHIDManagerRegisterDeviceRemovalCallback(manager, deviceRemovedCallback, Unmanaged.passUnretained(self).toOpaque())
-        
-        guard IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess else { return }
-        
+
+        let openResult = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
+        guard openResult == kIOReturnSuccess else {
+            rmDebug(String(format: "⚠️ IOHIDManagerOpen failed (IOReturn=0x%X)", openResult))
+            return
+        }
+        rmDebug("🛰 IOHIDManagerOpen success")
+
         IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
-        
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.enumerateAllDevices()
         }
@@ -63,10 +97,19 @@ class RemoteDetector {
     
     private func enumerateAllDevices() {
         guard let manager = manager,
-              let deviceSet = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else { return }
-        
-        // Use the same isSiriRemote check for consistency
+              let deviceSet = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else {
+            rmDebug("🛰 IOHIDManagerCopyDevices returned nil/empty (TCC block or matching mismatch)")
+            return
+        }
+        rmDebug("🛰 enumeration found \(deviceSet.count) HID device(s) matching filter")
         for device in deviceSet {
+            let v = IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? Int ?? -1
+            let p = IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? Int ?? -1
+            let n = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String ?? "?"
+            let pup = IOHIDDeviceGetProperty(device, kIOHIDPrimaryUsagePageKey as CFString) as? Int ?? -1
+            let pu  = IOHIDDeviceGetProperty(device, kIOHIDPrimaryUsageKey as CFString) as? Int ?? -1
+            rmDebug(String(format: "🛰 candidate vendor=0x%X product=0x%X usagePage=0x%X usage=0x%X name=%@",
+                           v, p, pup, pu, n))
             if isSiriRemote(device) {
                 handleDeviceAdded(device)
             }

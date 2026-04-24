@@ -401,7 +401,6 @@ class TouchHandler {
         if duration < tapMaxDuration && movement < tapMaxDistance {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                CursorController.playKeyPressFeedback()
                 self.cursorController.performClick()
             }
         }
