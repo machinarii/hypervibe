@@ -16,9 +16,7 @@ Tested with the 1st-gen Siri Remote (Model A1513). Support for Xbox Adaptive Joy
 
 ## Demo
 
-<video src="demo-video.m4v" controls width="70%"></video>
-
-[▶ Watch demo video](demo-video.m4v)
+<video src="[demo-video.m4v](https://github.com/machinarii/hypervibe/blob/main/demo-video.m4v)" controls width="70%"></video>
 
 ---
 
