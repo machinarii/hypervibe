@@ -8,6 +8,8 @@ Grab a remote, push to talk, and vibe-code with Claude Code without breaking flo
 
 Hyper optimize your vibe coding workflow with a single hand!
 
+<img src="demo.gif" alt="HyperVibe demo" width="70%">
+
 Tested with the 1st-gen Siri Remote (Model A1513). Support for Xbox Adaptive Joystick coming soon.
 
 > **Experimental release.** For now, HyperVibe ships as an experiment — there is no pre-built binary. You'll have to build the app bundle yourself (see [Building](#building)). Your mileage may vary.
