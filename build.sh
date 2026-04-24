@@ -16,6 +16,7 @@ SWIFT_FILES=(
     "CursorController.swift"
     "MediaKeyInterceptor.swift"
     "TouchHandler.swift"
+    "SystemVolume.swift"
 )
 
 # Find SDK path

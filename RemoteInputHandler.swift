@@ -36,6 +36,11 @@ class RemoteInputHandler {
     /// Captured at press time so release can fire the correct keyUp even if the user
     /// rebinds the button mid-hold. Cleared on device removal to avoid stuck modifiers.
     private var heldKeys: [String: (keyCode: Int, flags: CGEventFlags)] = [:]
+
+    /// Last observed pressed/released state per button. The Siri Remote mirrors each logical
+    /// button across multiple HID interfaces (6 seized here), so every physical press/release
+    /// fires the callback N times. This collapses dup events to a single state transition.
+    private var buttonState: [String: Bool] = [:]
     
     init(cursorController: CursorController, menuBarManager: MenuBarManager) {
         self.cursorController = cursorController
@@ -91,6 +96,20 @@ class RemoteInputHandler {
         guard let buttonName = identified else { return }
 
         onButtonActivity?()
+
+        // Collapse mirrored-interface duplicates: only proceed on a real state transition.
+        let isPressed = (intValue == 1)
+        if buttonState[buttonName] == isPressed {
+            return
+        }
+        buttonState[buttonName] = isPressed
+
+        // Volume keys on the Siri Remote also travel over BT AVRCP absolute-volume, which
+        // coreaudiod honors below cghidEventTap. Arm the revert guard on every press so the
+        // CoreAudio listener snaps the level back to the pre-press value.
+        if isPressed && (buttonName == "volumeUp" || buttonName == "volumeDown") {
+            VolumeRevertGuard.shared.armFromRemoteButton()
+        }
 
         // First key-down after connection: skip so the connect handshake doesn't fire an action.
         if intValue == 1 && isFirstPressAfterConnection {
@@ -252,6 +271,7 @@ class RemoteInputHandler {
             postKey(keyCode: held.keyCode, flags: [], keyDown: false)
         }
         heldKeys.removeAll()
+        buttonState.removeAll()
     }
 
     private func postKey(keyCode: Int, flags: CGEventFlags, keyDown: Bool) {
