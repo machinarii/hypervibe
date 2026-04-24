@@ -1,0 +1,39 @@
+# Build artifacts
+Remotastic
+Remotastic.app/
+
+# Xcode
+.swiftpm/
+.build/
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+
+# System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Temporary files
+*.log
+*.tmp
+*.cache
+
+# Generated icon files
+*.icns
+
+# macOS
+.AppleDouble
+.LSOverride
