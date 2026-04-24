@@ -13,7 +13,6 @@ import AppKit
 
 class RemoteInputHandler {
     private let cursorController: CursorController
-    private let mediaController: MediaController
     private weak var menuBarManager: MenuBarManager?
     private var devices: [IOHIDDevice] = []
     
@@ -38,9 +37,8 @@ class RemoteInputHandler {
     /// rebinds the button mid-hold. Cleared on device removal to avoid stuck modifiers.
     private var heldKeys: [String: (keyCode: Int, flags: CGEventFlags)] = [:]
     
-    init(cursorController: CursorController, mediaController: MediaController, menuBarManager: MenuBarManager) {
+    init(cursorController: CursorController, menuBarManager: MenuBarManager) {
         self.cursorController = cursorController
-        self.mediaController = mediaController
         self.menuBarManager = menuBarManager
     }
     
@@ -268,21 +266,6 @@ class RemoteInputHandler {
         usleep(10000)
         postKey(keyCode: keyCode, flags: flags, keyDown: false)
     }
-}
-
-/// Opens Mission Control (one path for CLI and app).
-func openMissionControl() {
-    let bundleID = "com.apple.exposelauncher"
-    if Bundle.main.bundlePath.hasSuffix(".app"),
-       let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
-        let config = NSWorkspace.OpenConfiguration()
-        NSWorkspace.shared.openApplication(at: url, configuration: config) { _, _ in }
-        return
-    }
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-    proc.arguments = ["-b", bundleID]
-    try? proc.run()
 }
 
 // C callback

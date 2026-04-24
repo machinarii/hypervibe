@@ -22,11 +22,14 @@ func renderIcon(size: CGFloat) -> Data? {
     ctx.addPath(CGPath(roundedRect: rect, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil))
     ctx.clip()
 
+    // Three-stop gradient in shades of #F07654 (warm coral): darker on top,
+    // base in the middle, lighter peach at the bottom.
     let colors = [
-        CGColor(red: 124/255, green:  58/255, blue: 237/255, alpha: 1),   // electric violet
-        CGColor(red: 236/255, green:  72/255, blue: 153/255, alpha: 1),   // hot pink
+        CGColor(red: 194/255, green:  68/255, blue:  32/255, alpha: 1),   // #C24420 (darker)
+        CGColor(red: 240/255, green: 118/255, blue:  84/255, alpha: 1),   // #F07654 (base)
+        CGColor(red: 249/255, green: 187/255, blue: 166/255, alpha: 1),   // #F9BBA6 (lighter)
     ] as CFArray
-    let gradient = CGGradient(colorsSpace: space, colors: colors, locations: [0, 1])!
+    let gradient = CGGradient(colorsSpace: space, colors: colors, locations: [0, 0.5, 1])!
     ctx.drawLinearGradient(gradient,
                            start: CGPoint(x: 0, y: size),
                            end:   CGPoint(x: 0, y: 0),

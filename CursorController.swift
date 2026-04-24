@@ -115,25 +115,6 @@ class CursorController {
         upEvent.post(tap: CGEventTapLocation.cghidEventTap)
     }
     
-    func performRightClick() {
-        let currentPosition = CGEvent(source: nil)?.location ?? .zero
-        
-        // Right mouse down
-        guard let downEvent = CGEvent(mouseEventSource: nil, mouseType: .rightMouseDown, mouseCursorPosition: currentPosition, mouseButton: .right) else {
-            return
-        }
-        downEvent.post(tap: CGEventTapLocation.cghidEventTap)
-        
-        // Small delay
-        usleep(10000) // 10ms
-        
-        // Right mouse up
-        guard let upEvent = CGEvent(mouseEventSource: nil, mouseType: .rightMouseUp, mouseCursorPosition: currentPosition, mouseButton: .right) else {
-            return
-        }
-        upEvent.post(tap: CGEventTapLocation.cghidEventTap)
-    }
-    
     func mouseDown() {
         let currentPosition = CGEvent(source: nil)?.location ?? .zero
         guard let event = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: currentPosition, mouseButton: .left) else {
@@ -155,16 +136,5 @@ class CursorController {
             return
         }
         event.post(tap: CGEventTapLocation.cghidEventTap)
-    }
-    
-    func sendKeyPress(keyCode: CGKeyCode) {
-        guard let keyDownEvent = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
-              let keyUpEvent = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else {
-            return
-        }
-        
-        keyDownEvent.post(tap: .cghidEventTap)
-        usleep(50000) // 50ms
-        keyUpEvent.post(tap: .cghidEventTap)
     }
 }

@@ -21,7 +21,6 @@ let package = Package(
                 "RemoteDetector.swift",
                 "RemoteInputHandler.swift",
                 "CursorController.swift",
-                "MediaController.swift",
                 "MediaKeyInterceptor.swift",
                 "TouchHandler.swift"
             ],
