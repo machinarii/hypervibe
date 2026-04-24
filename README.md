@@ -123,6 +123,8 @@ This runs a single `swiftc` invocation over all the project's Swift files, linki
 5. Pair the Siri Remote via **System Settings → Bluetooth** if it isn't already paired
 6. Use the menu-bar walkie-talkie glyph to access Button Mappings and Swipe Gestures
 
+> ⚠️ **Important:** You must explicitly add **HyperVibe.app** to **System Settings → Privacy & Security → Input Monitoring** (click the **+** button and select the app). Without this, HyperVibe may not properly intercept HID events/media keys, which means vol up and down buttons and play/pause buttons will trigger volume change and triggering of Apple Music.
+
 A diagnostic log is written to `/tmp/hypervibe.log` (NSLog is redacted under hardened runtime, so HyperVibe uses file-based logging).
 
 ---
