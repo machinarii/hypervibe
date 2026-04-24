@@ -1,0 +1,147 @@
+
+/* Class = "NSTextFieldCell"; title = "Press: Next Track"; ObjectID = "0U7-Nw-Fsv"; */
+"0U7-Nw-Fsv.title" = "Press: Nächster Track";
+
+/* Class = "NSMenuItem"; title = "SiriMote"; ObjectID = "1Xt-HY-uBw"; */
+"1Xt-HY-uBw.title" = "SiriMote";
+
+/* Class = "NSTextFieldCell"; title = "Press: Previous Track"; ObjectID = "224-pc-SkO"; */
+"224-pc-SkO.title" = "Drücken: Vorheriger Track";
+
+/* Class = "NSTextFieldCell"; title = "Press & Hold: Fast Forward"; ObjectID = "3jp-nc-OWL"; */
+"3jp-nc-OWL.title" = "Drücken & Halten: Vorspulen";
+
+/* Class = "NSMenuItem"; title = "Quit SiriMote"; ObjectID = "4sb-4s-VLi"; */
+"4sb-4s-VLi.title" = "SiriMote beenden";
+
+/* Class = "NSTextFieldCell"; title = "Volume Up"; ObjectID = "5GZ-eD-vCy"; */
+"5GZ-eD-vCy.title" = "Lauter";
+
+/* Class = "NSMenuItem"; title = "About SiriMote"; ObjectID = "5kV-Vb-QxS"; */
+"5kV-Vb-QxS.title" = "Über SiriMote";
+
+/* Class = "NSMenu"; title = "Main Menu"; ObjectID = "AYu-sK-qS6"; */
+"AYu-sK-qS6.title" = "Main Menu";
+
+/* Class = "NSTextFieldCell"; title = "Control iTunes, QuickTime, Keynote and more\nwith your Apple TV Siri Remote"; ObjectID = "Acp-Lb-HlX"; */
+"Acp-Lb-HlX.title" = "Steuern Sie iTunes, QuickTime, Keynote\nund mehr mit Ihrer Apple TV Siri Remote";
+
+/* Class = "NSMenuItem"; title = "Help"; ObjectID = "BbH-09-RC6"; */
+"BbH-09-RC6.title" = "Hilfe";
+
+/* Class = "NSTextFieldCell"; title = "Play / Pause"; ObjectID = "BgA-M8-atE"; */
+"BgA-M8-atE.title" = "Abspielen / Pausieren";
+
+/* Class = "NSTextFieldCell"; title = "Press & Hold: Sleep"; ObjectID = "Br2-zg-zz4"; */
+"Br2-zg-zz4.title" = "Drücken & Halten: Ruhezustand";
+
+/* Class = "NSTextFieldCell"; title = "Show / Hide SiriMote App"; ObjectID = "CnX-cb-bFj"; */
+"CnX-cb-bFj.title" = "SiriMote zeigen/ausblenden";
+
+/* Class = "NSTextFieldCell"; title = "Volume Down"; ObjectID = "Cro-KO-dDt"; */
+"Cro-KO-dDt.title" = "Leiser";
+
+/* Class = "NSTextFieldCell"; title = "Volume Up"; ObjectID = "DFG-MM-Ifh"; */
+"DFG-MM-Ifh.title" = "Lauter";
+
+/* Class = "NSTextFieldCell"; title = "Press: Next Track"; ObjectID = "DJW-0I-NtZ"; */
+"DJW-0I-NtZ.title" = "Drücken: Nächster Track";
+
+/* Class = "NSTextFieldCell"; title = "Press & Hold: Fast Forward"; ObjectID = "DZE-ER-6TX"; */
+"DZE-ER-6TX.title" = "Drücken & Halten: Vorspulen";
+
+/* Class = "NSTextFieldCell"; title = "Press & Hold: Rewind"; ObjectID = "Eu8-UE-b7A"; */
+"Eu8-UE-b7A.title" = "Drücken & Halten: Zurückspulen";
+
+/* Class = "NSMenuItem"; title = "Bring All to Front"; ObjectID = "F35-ul-uPX"; */
+"F35-ul-uPX.title" = "Alle in den Vordergrund bringen";
+
+/* Class = "NSTextFieldCell"; title = "Show/Hide SiriMote App"; ObjectID = "ISQ-Q8-NAb"; */
+"ISQ-Q8-NAb.title" = "SiriMote zeigen/ausblenden";
+
+/* Class = "NSMenuItem"; title = "Show All"; ObjectID = "Kd2-mp-pUS"; */
+"Kd2-mp-pUS.title" = "Alle zeigen";
+
+/* Class = "NSMenuItem"; title = "Open Bluetooth Preferences..."; ObjectID = "LWA-pC-DSs"; */
+"LWA-pC-DSs.title" = "Bluetooth Einstellungen öffnen...";
+
+/* Class = "NSMenuItem"; title = "Close"; ObjectID = "MdJ-DF-mhA"; */
+"MdJ-DF-mhA.title" = "Schließen";
+
+/* Class = "NSMenuItem"; title = "Services"; ObjectID = "NMo-om-nkz"; */
+"NMo-om-nkz.title" = "Dienste";
+
+/* Class = "NSMenuItem"; title = "Window"; ObjectID = "NpA-UC-ZAd"; */
+"NpA-UC-ZAd.title" = "Window";
+
+/* Class = "NSTextFieldCell"; title = "Press & Hold: Rewind"; ObjectID = "Nqf-Pc-d81"; */
+"Nqf-Pc-d81.title" = "Drücken & Halten: Zurückspulen";
+
+/* Class = "NSMenuItem"; title = "Hide SiriMote"; ObjectID = "Olw-nP-bQN"; */
+"Olw-nP-bQN.title" = "SiriMote ausblenden";
+
+/* Class = "NSButtonCell"; title = "Move SiriMote into the background"; ObjectID = "Pwa-xd-EBT"; */
+"Pwa-xd-EBT.title" = "SiriMote in den Hintergrund schicken";
+
+/* Class = "NSMenuItem"; title = "Zoom"; ObjectID = "QZp-A0-XqB"; */
+"QZp-A0-XqB.title" = "Vergrößern";
+
+/* Class = "NSWindow"; title = "SiriMote"; ObjectID = "QvC-M9-y7g"; */
+"QvC-M9-y7g.title" = "SiriMote";
+
+/* Class = "NSTextFieldCell"; title = "Press & Hold: Sleep Options"; ObjectID = "Qvy-8P-1M6"; */
+"Qvy-8P-1M6.title" = "Drücken & Halten: Ruhezustandoptionen";
+
+/* Class = "NSTextFieldCell"; title = "Volume Down"; ObjectID = "SVi-r2-NqM"; */
+"SVi-r2-NqM.title" = "Leiser";
+
+/* Class = "NSTextFieldCell"; title = "To pair your Apple TV Siri Remote with your Mac,\n- Turn off and unplug your Apple TV\n- Launch System Preferences and click on Bluetooth\n- Press and hold the Menu and Volume Up buttons on the remote for about 5 seconds\n- In the Bluetooth System Preferences, click on Pair next to the new device that appeared\n\nPlease make sure you add SiriMote to System Preferences -> Security & Privacy -> Privacy -> Accessibility"; ObjectID = "SX8-Cc-K3n"; */
+"SX8-Cc-K3n.title" = "Um Ihre Apple TV Siri Remote mit Ihrem Mac zu koppeln,\n- Schalten Sie Ihr Apple TV ab und nehmen Sie es vom Strom\n- Öffnen Sie das Programm System Einstellungen - Bluetooth\n- Halten Sie die Menü-/Zurück- und Lauter-Tasten auf Ihrer Remote für ca. 5 Sekunden gedrückt\n- In den Bluetooth-Einstellungen, klicken Sie auf Koppeln\n\nWenn die Apple TV Siri Fernbedienung gekoppelt ist und SiriMote es als gekoppelt anzeigt, aber es trotzdem nicht funktioniert, gehen Sie bitte sicher, dass SiriMote in Systemeinstellungen -> Sicherheit -> Bedienungshilfen aktiviert ist.";
+
+/* Class = "NSMenuItem"; title = "Hide Others"; ObjectID = "Vdr-fp-XzO"; */
+"Vdr-fp-XzO.title" = "Andere ausblenden";
+
+/* Class = "NSMenu"; title = "File"; ObjectID = "dLV-js-aNL"; */
+"dLV-js-aNL.title" = "Ablage";
+
+/* Class = "NSMenuItem"; title = "File"; ObjectID = "eqW-Pv-Rer"; */
+"eqW-Pv-Rer.title" = "Ablage";
+
+/* Class = "NSMenu"; title = "Window"; ObjectID = "fWP-qL-gPm"; */
+"fWP-qL-gPm.title" = "Fenster";
+
+/* Class = "NSTextFieldCell"; title = "Show SiriMote"; ObjectID = "gzR-is-CT7"; */
+"gzR-is-CT7.title" = "SiriMote zeigen";
+
+/* Class = "NSMenuItem"; title = "Preferences..."; ObjectID = "hd8-3V-faa"; */
+"hd8-3V-faa.title" = "Einstellungen...";
+
+/* Class = "NSMenu"; title = "Services"; ObjectID = "hz9-B4-Xy5"; */
+"hz9-B4-Xy5.title" = "Dienste";
+
+/* Class = "NSTextFieldCell"; title = "Play / Pause"; ObjectID = "i5q-mR-Tt8"; */
+"i5q-mR-Tt8.title" = "Abspielen / Pausieren";
+
+/* Class = "NSTextFieldCell"; title = "Mute"; ObjectID = "iK2-NU-ljt"; */
+"iK2-NU-ljt.title" = "Stumm ";
+
+/* Class = "NSMenuItem"; title = "Check for Updates..."; ObjectID = "ikm-2g-qhq"; */
+"ikm-2g-qhq.title" = "Nach Updates suchen...";
+
+/* Class = "NSTextFieldCell"; title = "Press: Previous Track"; ObjectID = "nEL-75-UK6"; */
+"nEL-75-UK6.title" = "Drücken: Vorheriger Track";
+
+/* Class = "NSTextFieldCell"; title = "Waiting for Apple TV Siri Remote..."; ObjectID = "rAr-9n-yjA"; */
+"rAr-9n-yjA.title" = "Warte auf Apple TV Siri Remote...";
+
+/* Class = "NSTextFieldCell"; title = "Press: Sleep Options"; ObjectID = "uJs-ry-dM4"; */
+"uJs-ry-dM4.title" = "Drücken: Ruhezustandoptionen";
+
+/* Class = "NSMenu"; title = "SiriMote"; ObjectID = "uQy-DD-JDr"; */
+"uQy-DD-JDr.title" = "SiriMote";
+
+/* Class = "NSMenu"; title = "Help"; ObjectID = "vwN-gk-CbG"; */
+"vwN-gk-CbG.title" = "Hilfe";
+
+/* Class = "NSMenuItem"; title = "Minimize"; ObjectID = "yzL-qa-S0O"; */
+"yzL-qa-S0O.title" = "Minimieren";

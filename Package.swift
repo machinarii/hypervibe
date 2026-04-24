@@ -22,7 +22,8 @@ let package = Package(
                 "RemoteInputHandler.swift",
                 "CursorController.swift",
                 "MediaKeyInterceptor.swift",
-                "TouchHandler.swift"
+                "TouchHandler.swift",
+                "SystemVolume.swift"
             ],
             linkerSettings: [
                 .linkedFramework("IOKit"),

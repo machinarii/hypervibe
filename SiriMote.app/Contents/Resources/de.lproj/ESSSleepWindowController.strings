@@ -1,0 +1,30 @@
+
+/* Class = "NSTextFieldCell"; title = "Shut Down"; ObjectID = "LuN-QT-eOI"; */
+"LuN-QT-eOI.title" = "Ausschalten";
+
+/* Class = "NSTextFieldCell"; title = "Shut Down"; ObjectID = "VTJ-na-IFK"; */
+"VTJ-na-IFK.title" = "Ausschalten";
+
+/* Class = "NSTextFieldCell"; title = "Display"; ObjectID = "Y9T-AX-xhn"; */
+"Y9T-AX-xhn.title" = "Monitor";
+
+/* Class = "NSTextFieldCell"; title = "Sleep"; ObjectID = "ZHm-8p-Uqb"; */
+"ZHm-8p-Uqb.title" = "Ruhezustand";
+
+/* Class = "NSTextFieldCell"; title = "Sleep"; ObjectID = "bSz-ae-pZ5"; */
+"bSz-ae-pZ5.title" = "Ruhezustand";
+
+/* Class = "NSTextFieldCell"; title = "Display"; ObjectID = "dIN-09-qhB"; */
+"dIN-09-qhB.title" = "Monitor";
+
+/* Class = "NSTextFieldCell"; title = "Cancel"; ObjectID = "fXY-oe-Yzf"; */
+"fXY-oe-Yzf.title" = "Abbrechen";
+
+/* Class = "NSTextFieldCell"; title = "System"; ObjectID = "kAh-mQ-kSN"; */
+"kAh-mQ-kSN.title" = "Computer";
+
+/* Class = "NSTextFieldCell"; title = "System"; ObjectID = "up3-9v-zDd"; */
+"up3-9v-zDd.title" = "Computer";
+
+/* Class = "NSTextFieldCell"; title = "Cancel"; ObjectID = "x9v-1c-lKl"; */
+"x9v-1c-lKl.title" = "Abbrechen";

@@ -1,0 +1,12 @@
+
+/* Class = "NSWindow"; title = "SiriMote Preferences"; ObjectID = "F0z-JX-Cv5"; */
+"F0z-JX-Cv5.title" = "SiriMote Preferences";
+
+/* Class = "NSButtonCell"; title = "Launch SiriMote in background"; ObjectID = "Oul-7X-XdO"; */
+"Oul-7X-XdO.title" = "Launch SiriMote in background";
+
+/* Class = "NSButtonCell"; title = "Launch SiriMote at login"; ObjectID = "Whs-WP-NQj"; */
+"Whs-WP-NQj.title" = "Launch SiriMote at login";
+
+/* Class = "NSTextFieldCell"; title = "Launches SiriMote without a Dock icon.\nTo bring it to the front, press the Remote's Home button\nor double-click SiriMote's app icon."; ObjectID = "z7Q-PD-wXO"; */
+"z7Q-PD-wXO.title" = "Launches SiriMote without a Dock icon.\nTo bring it to the front, press the Remote's Home button\nor double-click SiriMote's app icon.";
