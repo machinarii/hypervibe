@@ -1,45 +1,22 @@
 # HyperVibe
 
-A macOS menu-bar app that turns a paired Apple TV Siri Remote into a **a walkie talkie for Claude Code ** for your Mac.
+A macOS menu-bar app that turns a paired Apple TV Siri Remote into **a walkie-talkie for Claude Code**.
 
-Hyper optimize your vibe coding productivity with HyperVibe and Claude Code! Just grab, push and talk!
+Grab the remote, push to talk, and vibe-code with Claude without breaking flow.
 
-It has been tested with Siri Remote Model A1513 (1st Gen).
+Tested with the 1st-gen Siri Remote (Model A1513).
 
 ---
 
 ## Features
 
-### Trackpad
-
-- **Trackpad swipe gestures** — single-finger flicks in each of four directions fire a configurable action (see "Swipe Gestures" below)
-- **Cursor movement** via single-finger drag
-- **Two-finger scroll** (natural-scroll direction, configurable scale)
-- **Tap-to-click** on the trackpad surface
-- **Drag** by holding the trackpad click and moving
-
-
 ### Buttons
 
-Each physical Siri Remote button is independently assignable via the menu bar → **Button Mappings**. Available actions:
+Each physical Siri Remote button is independently assignable via the menu bar.
 
-| Action | Behavior |
-|---|---|
-| None | Do nothing |
-| Enter: Submit prompt | Virtual Return |
-| Up: Navigate Up | Up arrow |
-| Down: Navigate Down | Down arrow |
-| Esc: Navigate Back | Escape |
-| Control + C: Cancel Prompt | Ctrl-C |
-| Trackpad Click | Left mouse click at cursor |
-| Space: Claude Voice Dictation *(hold)* | Mirrors HID press duration — virtual keyDown on press, keyUp on release |
-| Right Command: 3rd-party Voice Dictation *(hold)* | Press-to-talk Right ⌘ |
-| Right Option: 3rd-party Voice Dictation *(hold)* | Press-to-talk Right ⌥ |
-
-**Hold-Capable Buttons:** Push-to-talk actions require buttons that emit both press and release HID events. Only Play/Pause, Volume Up, Volume Down, and Siri buttons allow for both events.
+<img src="siri-remote-button-mapping-default.png" alt="Default Siri Remote button mapping" width="50%">
 
 **Default Button Mapping (Customizable):**
-- Trackpad Click → Trackpad Click
 - Menu → Esc
 - TV → Ctrl + C
 - Siri → Space (Claude Voice Dictation)
@@ -47,13 +24,34 @@ Each physical Siri Remote button is independently assignable via the menu bar �
 - Volume Up → Up
 - Volume Down → Down
 
-<img src="siri-remote-button-mapping-default.png" alt="Default Siri Remote button mapping" width="50%">
+| Action | Behavior |
+|---|---|
+| Play/pause button | Enter (submit prompt) |
+| Volume up button | Up arrow |
+| Volume down button | Down arrow |
+| Menu button | Esc (Navigate back) |
+| TV button | Control + C (cancel prompt) |
+| Trackpad click | Left mouse click |
+| Siri/mic button | Space on hold (Claude Voice Dictation |
+| Siri/mic button | Right ⌘ on hold (Claude Voice Dictation |
+| Siri/mic button | Right ⌥ on hold (Claude Voice Dictation |
+
+**Hold-Capable Buttons:** Push-to-talk actions require buttons that emit both press and release HID events. Only Play/Pause, Volume Up, Volume Down, and Siri buttons allow for both events.
+
 
 ### Swipe Gestures
 
 Four independently configurable single-finger swipe directions on the trackpad surface. Detection is velocity-gated: **distance ≥ 35%** of trackpad, **duration < 350 ms**, **dominant axis ≥ 2×** the other. Slow drags continue to move the cursor; only deliberate flicks trigger actions.
 
-Assignable actions per direction:
+<img src="siri-remote-gesture-mapping.png" alt="Siri Remote swipe gesture mapping" width="50%">
+
+**Default Gesture Mapping (Customizable):**
+- Swipe Up → `/usage`
+- Swipe Down → `/compact`
+- Swipe Left → `/model`
+- Swipe Right → Mode Switching (Shift + Tab)
+
+Assignable actions:
 
 - **Arrow keys (direction-matched)**: "Left: Navigate Left" offered only on Swipe Left; "Right: Navigate Right" offered only on Swipe Right.
 - **Mode Switching (Shift + Tab)** — toggle between normal / plan / auto-accept modes in Claude Code.
@@ -65,13 +63,12 @@ Assignable actions per direction:
 
 **Enter is never sent** — gestures type the command but leave Enter for the user, so the command can be reviewed, edited, or augmented with arguments.
 
-**Default Gesture Mapping (Customizable):**
-- Swipe Up → `/usage`
-- Swipe Down → `/compact`
-- Swipe Left → `/model`
-- Swipe Right → Mode Switching (Shift + Tab)
+### Other Trackpad Inputs
 
-<img src="siri-remote-gesture-mapping.png" alt="Siri Remote swipe gesture mapping" width="50%">
+- **Cursor movement** via single-finger drag
+- **Two-finger scroll** (natural-scroll direction, configurable scale)
+- **Tap-to-click** on the trackpad surface
+- **Drag** by holding the trackpad click and moving
 
 ### Persistence
 
@@ -156,5 +153,8 @@ Both paths converge on the same button mapping through a 200 ms debounce (static
 
 ## Credits and License
 
- **Fork & improvements.** HyperVibe is built on top of [Remotastic](https://github.com/lauschue/Remotastic) by [@lauschue](https://github.com/lauschue), which provided the foundational Siri-Remote HID handling, MultitouchSupport integration, and menu-bar scaffolding. HyperVibe extends it with configurable Claude Code workflows, shortcuts, push-to-talk and swipe gesture.
+ **Fork & improvements.** HyperVibe is built on top of [Remotastic](https://github.com/lauschue/Remotastic) by [@lauschue](https://github.com/lauschue), which provided the foundational Siri-Remote HID handling, MultitouchSupport integration, and menu-bar scaffolding. HyperVibe extends it with configurable Claude Code workflows, keyboard shortcuts, push-to-talk and swipe gesture.
 - License: see `LICENSE`.
+- Diagram icons from [The Noun Project](https://thenounproject.com/):
+  - [Arrow Up by Dayeong Kim](https://thenounproject.com/icon/arrow-up-6066125/)
+  - [Microphone by Alvida](https://thenounproject.com/icon/microphone-8162320/)
