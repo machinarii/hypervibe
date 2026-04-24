@@ -6,9 +6,9 @@ A macOS menu-bar app that turns a paired Apple TV Siri Remote into **a walkie-ta
 
 Grab a remote, push to talk, and vibe-code with Claude Code without breaking flow. 
 
-Hyper optimize your vibe coding with a single hand!
+Hyper optimize your vibe coding workflow with a single hand!
 
-Tested with the 1st-gen Siri Remote (Model A1513).
+Tested with the 1st-gen Siri Remote (Model A1513). Support for Xbox Adaptive Joystick coming soon.
 
 ---
 
@@ -25,10 +25,10 @@ Each physical Siri Remote button is independently assignable via the menu bar.
 **Default Button Mapping (Customizable):**
 - Menu → Esc
 - TV → Ctrl + C
-- Siri → Space (Claude Voice Dictation)
+- Siri → Space (Claude voice dictation)
 - Play/Pause → Enter
-- Volume Up → Up
-- Volume Down → Down
+- Volume Up → Up arrow
+- Volume Down → Down arrow
 
 | Action | Behavior |
 |---|---|
@@ -38,9 +38,9 @@ Each physical Siri Remote button is independently assignable via the menu bar.
 | Menu button | Esc (Navigate back) |
 | TV button | Control + C (cancel prompt) |
 | Trackpad click | Left mouse click |
-| Siri/mic button | Space on hold (Claude Voice Dictation |
-| Siri/mic button | Right ⌘ on hold (Claude Voice Dictation |
-| Siri/mic button | Right ⌥ on hold (Claude Voice Dictation |
+| Siri/mic button | Space on hold (Claude voice dictation must be enabled |
+| Siri/mic button | Right ⌘ on hold (3rd party voice dictation like VoiceInk) |
+| Siri/mic button | Right ⌥ on hold (3rd party voice dictation like VoiceInk) |
 
 **Hold-Capable Buttons:** Push-to-talk actions require buttons that emit both press and release HID events. Only Play/Pause, Volume Up, Volume Down, and Siri buttons allow for both events.
 
@@ -122,23 +122,6 @@ This runs a single `swiftc` invocation over all the project's Swift files, linki
 A diagnostic log is written to `/tmp/hypervibe.log` (NSLog is redacted under hardened runtime, so HyperVibe uses file-based logging).
 
 ---
-
-## Architecture
-
-| File | Role |
-|---|---|
-| `main.swift` | NSApplication entry point |
-| `SiriRemoteApp.swift` | AppDelegate — wires detector, input handler, touch handler, menu bar, and media-key interceptor |
-| `RemoteDetector.swift` | IOHIDManager-based device discovery (matches on Apple vendor ID across Consumer / Digitizer / Apple Vendor / Generic Desktop usage pages) |
-| `RemoteInputHandler.swift` | HID input callback, button identification, hold tracking, action dispatch |
-| `TouchHandler.swift` | MultitouchSupport integration — cursor, scroll, tap, swipe detection |
-| `CursorController.swift` | Mouse movement, clicks, drag |
-| `MediaKeyInterceptor.swift` | `cghidEventTap` fallback for AVRCP media keys (with 200 ms debounce against the HID path) |
-| `MenuBarManager.swift` | Menu bar UI, mappings, persistence, swipe execution |
-| `SiriRemote-Bridging-Header.h` | Bridges the private MultitouchSupport C API to Swift |
-| `gen_icon.swift` | Renders the app-icon PNG frames for `iconutil` |
-| `build.sh` / `create_app_bundle.sh` | Build and bundle scripts |
-| `HyperVibe.entitlements` | Hardened-runtime entitlements for Bluetooth HID |
 
 ### Why two paths for the same button?
 
