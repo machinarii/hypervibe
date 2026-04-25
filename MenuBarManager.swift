@@ -175,16 +175,45 @@ class MenuBarManager {
         UserDefaults.standard.set(toSave, forKey: "buttonMappings")
     }
     
-    /// Load the menu-bar icon from bundle resources. Template image → auto-tinted by macOS.
+    /// Procedurally draw the menu-bar icon — a walkie-talkie glyph mirroring the
+    /// Figma reference (36-unit viewBox: antenna + body with display + speaker
+    /// holes via even-odd fill). 2× centered scale matches the menu-bar reading
+    /// size; overflow clips at the canvas edges by design.
     private static func makeWaveIcon() -> NSImage {
-        if let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),
-           let image = NSImage(contentsOf: url) {
-            image.size = NSSize(width: 18, height: 18)
-            image.isTemplate = true
-            return image
+        let pt: CGFloat = 18
+        let image = NSImage(size: NSSize(width: pt, height: pt), flipped: true) { rect in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            let s = rect.width
+
+            ctx.translateBy(x: s / 2, y: s / 2)
+            ctx.scaleBy(x: 2, y: 2)
+            ctx.translateBy(x: -s / 2, y: -s / 2)
+
+            ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+
+            let antenna = CGRect(x: 0.5260 * s, y: 0.1944 * s,
+                                 width: 0.0638 * s, height: 0.1594 * s)
+            let body    = CGRect(x: 0.3348 * s, y: 0.3538 * s,
+                                 width: 0.3187 * s, height: 0.4462 * s)
+            let display = CGRect(x: 0.3986 * s, y: 0.6406 * s,
+                                 width: 0.1911 * s, height: 0.0956 * s)
+            let speakerR: CGFloat = 0.0956 * s
+            let speaker = CGRect(x: 0.4942 * s - speakerR, y: 0.5131 * s - speakerR,
+                                 width: 2 * speakerR, height: 2 * speakerR)
+
+            let path = CGMutablePath()
+            path.addPath(CGPath(roundedRect: antenna,
+                                cornerWidth: 0.0278 * s, cornerHeight: 0.0278 * s, transform: nil))
+            path.addPath(CGPath(roundedRect: body,
+                                cornerWidth: 0.0556 * s, cornerHeight: 0.0556 * s, transform: nil))
+            path.addPath(CGPath(roundedRect: display,
+                                cornerWidth: 0.0278 * s, cornerHeight: 0.0278 * s, transform: nil))
+            path.addEllipse(in: speaker)
+
+            ctx.addPath(path)
+            ctx.fillPath(using: .evenOdd)
+            return true
         }
-        // Fallback: empty 18x18 template image
-        let image = NSImage(size: NSSize(width: 18, height: 18))
         image.isTemplate = true
         return image
     }
