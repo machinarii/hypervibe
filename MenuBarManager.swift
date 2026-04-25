@@ -175,41 +175,16 @@ class MenuBarManager {
         UserDefaults.standard.set(toSave, forKey: "buttonMappings")
     }
     
-    /// Draw a walkie-talkie silhouette for the menu-bar icon. Template image → auto-tinted by macOS.
-    /// Body is filled with even-odd rule so the display and speaker openings are transparent holes.
+    /// Load the menu-bar icon from bundle resources. Template image → auto-tinted by macOS.
     private static func makeWaveIcon() -> NSImage {
-        // Scaled 20% down from the original 16×22 design; antenna is thicker relative to the body.
-        let scale: CGFloat = 0.8
-        let size = NSSize(width: 16 * scale, height: 22 * scale)
-        let image = NSImage(size: size, flipped: false) { rect in
-            // Coordinate system: origin bottom-left. All rects scaled uniformly.
-            let bodyRect    = NSRect(x: 2 * scale,  y: 0,            width: 12 * scale, height: 16 * scale)
-            let displayRect = NSRect(x: 4 * scale,  y: 12 * scale,   width: 8 * scale,  height: 2.4 * scale)
-            let speakerRect = NSRect(x: 5 * scale,  y: 2 * scale,    width: 6 * scale,  height: 6 * scale)
-            let bodyRadius:    CGFloat = 1.6 * scale
-            let displayRadius: CGFloat = 0.5 * scale
-
-            // Body + cutouts as one even-odd path so the holes are truly transparent (required for template tinting).
-            let body = NSBezierPath()
-            body.appendRoundedRect(bodyRect, xRadius: bodyRadius, yRadius: bodyRadius)
-            body.appendRoundedRect(displayRect, xRadius: displayRadius, yRadius: displayRadius)
-            body.appendOval(in: speakerRect)
-            body.windingRule = .evenOdd
-            NSColor.black.setFill()
-            body.fill()
-
-            // Single antenna rising from left-of-center. Line width is not scaled down with the
-            // body — boosted to 1.6pt so it reads thicker than the original 1.2pt despite the 20% shrink.
-            NSColor.black.setStroke()
-            let antenna = NSBezierPath()
-            antenna.lineWidth = 1.6
-            antenna.lineCapStyle = .round
-            antenna.move(to: NSPoint(x: 5.5 * scale, y: 16 * scale))
-            antenna.line(to: NSPoint(x: 5.5 * scale, y: 21.2 * scale))
-            antenna.stroke()
-
-            return true
+        if let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            image.size = NSSize(width: 18, height: 18)
+            image.isTemplate = true
+            return image
         }
+        // Fallback: empty 18x18 template image
+        let image = NSImage(size: NSSize(width: 18, height: 18))
         image.isTemplate = true
         return image
     }

@@ -3,7 +3,7 @@ import AppKit
 import CoreGraphics
 
 /// Render one frame of the HyperVibe icon at the given pixel size.
-/// Design: squircle with purple→pink gradient + white "H" whose crossbar is a sine wave.
+/// Design: squircle with solid #252525 background and solid #FFFFFF walkie-talkie illustration.
 func renderIcon(size: CGFloat) -> Data? {
     let w = Int(size), h = Int(size)
     let space = CGColorSpaceCreateDeviceRGB()
@@ -17,23 +17,14 @@ func renderIcon(size: CGFloat) -> Data? {
     let rect = CGRect(x: 0, y: 0, width: size, height: size)
     let cornerRadius = size * 0.225  // macOS Big Sur+ squircle ratio
 
-    // Clip to rounded-rect, then fill with vertical gradient
+    // Clip to rounded-rect, then fill with solid background
     ctx.saveGState()
     ctx.addPath(CGPath(roundedRect: rect, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil))
     ctx.clip()
 
-    // Three-stop gradient in shades of #F07654 (warm coral): darker on top,
-    // base in the middle, lighter peach at the bottom.
-    let colors = [
-        CGColor(red: 194/255, green:  68/255, blue:  32/255, alpha: 1),   // #C24420 (darker)
-        CGColor(red: 240/255, green: 118/255, blue:  84/255, alpha: 1),   // #F07654 (base)
-        CGColor(red: 249/255, green: 187/255, blue: 166/255, alpha: 1),   // #F9BBA6 (lighter)
-    ] as CFArray
-    let gradient = CGGradient(colorsSpace: space, colors: colors, locations: [0, 0.5, 1])!
-    ctx.drawLinearGradient(gradient,
-                           start: CGPoint(x: 0, y: size),
-                           end:   CGPoint(x: 0, y: 0),
-                           options: [])
+    // Solid #252525 background.
+    ctx.setFillColor(CGColor(red: 0x25/255, green: 0x25/255, blue: 0x25/255, alpha: 1))
+    ctx.fill(rect)
 
     // White walkie-talkie silhouette (same shape family as the menu-bar glyph).
     // Body + display/speaker cutouts rendered as one even-odd path so the holes stay transparent
