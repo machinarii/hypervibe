@@ -33,6 +33,12 @@ elif [ -f "SiriRemote.icns" ]; then
     echo "Icon added to app bundle"
 fi
 
+# Copy menu bar icon resources
+if [ -d "Resources" ]; then
+    cp Resources/MenuBarIcon*.png "${APP_BUNDLE}/Contents/Resources/" 2>/dev/null || true
+    echo "Menu bar icons added to app bundle"
+fi
+
 # Create proper Info.plist with all required keys
 echo "Creating Info.plist..."
 cat > "${APP_BUNDLE}/Contents/Info.plist" <<EOF

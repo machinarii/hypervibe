@@ -166,6 +166,7 @@ Between the private `MultitouchSupport` framework and the undocumented `NX_SYSDE
 ## Credits
 
  **Fork & improvements.** HyperVibe is built on top of [Remotastic](https://github.com/lauschue/Remotastic) by [@lauschue](https://github.com/lauschue), which provided the foundational Siri-Remote HID handling, MultitouchSupport integration, and menu-bar scaffolding. HyperVibe extends it with configurable Claude Code workflows, keyboard shortcuts, push-to-talk and swipe gesture.
-- Diagram icons from [The Noun Project](https://thenounproject.com/):
+- Icons from [The Noun Project](https://thenounproject.com/):
   - [Arrow Up by Dayeong Kim](https://thenounproject.com/icon/arrow-up-6066125/)
   - [Microphone by Alvida](https://thenounproject.com/icon/microphone-8162320/)
+  - [Radio by Kiran Shastry](https://thenounproject.com/icon/radio-2338991/)
