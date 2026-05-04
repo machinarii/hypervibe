@@ -13,6 +13,14 @@ import AppKit
 class CursorController {
     private let sensitivity: CGFloat = 2.0
     private let acceleration: CGFloat = 1.2
+    private let remotePositionCacheInterval: TimeInterval = 0.15
+    private let mouseEventSource: CGEventSource? = {
+        let source = CGEventSource(stateID: .hidSystemState)
+        source?.localEventsSuppressionInterval = 0
+        return source
+    }()
+    private var lastPostedCursorPosition: CGPoint?
+    private var lastPostedCursorPositionTime: Date = .distantPast
     
     var isDragging: Bool = false
     var isClickActive: Bool = false
@@ -47,7 +55,12 @@ class CursorController {
     }
 
     private func currentCursorPosition() -> CGPoint {
-        if let event = CGEvent(source: nil), event.location != .zero {
+        if let cached = lastPostedCursorPosition,
+           Date().timeIntervalSince(lastPostedCursorPositionTime) < remotePositionCacheInterval {
+            return cached
+        }
+
+        if let event = CGEvent(source: nil) {
             return event.location
         }
 
@@ -93,13 +106,14 @@ class CursorController {
         let clampedY = abs(targetPosition.y - rawTargetPosition.y) > 0.001
         
         let eventType: CGEventType = isDragging ? .leftMouseDragged : .mouseMoved
-        guard let event = CGEvent(mouseEventSource: nil, mouseType: eventType, mouseCursorPosition: targetPosition, mouseButton: .left) else {
+        guard let event = CGEvent(mouseEventSource: mouseEventSource, mouseType: eventType, mouseCursorPosition: targetPosition, mouseButton: .left) else {
             return (clampedX, clampedY)
         }
         event.setIntegerValueField(.mouseEventDeltaX, value: Int64(scaledDeltaX.rounded()))
         event.setIntegerValueField(.mouseEventDeltaY, value: Int64(scaledDeltaY.rounded()))
         event.post(tap: CGEventTapLocation.cghidEventTap)
-        CGWarpMouseCursorPosition(targetPosition)
+        lastPostedCursorPosition = targetPosition
+        lastPostedCursorPositionTime = Date()
 
         return (clampedX, clampedY)
     }

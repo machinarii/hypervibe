@@ -43,10 +43,14 @@ class RemoteInputHandler {
         self.cursorController = cursorController
         self.menuBarManager = menuBarManager
     }
+
+    deinit {
+        releaseSelectIfNeeded(reason: "handler deinit")
+    }
     
     func setRemoteDevice(_ device: IOHIDDevice?) {
         guard let device = device else {
-            releaseSelectIfNeeded()
+            releaseSelectIfNeeded(reason: "device removed")
             releaseAllHeldKeys()
             for d in devices {
                 IOHIDDeviceRegisterInputValueCallback(d, nil, nil)
@@ -82,8 +86,9 @@ class RemoteInputHandler {
         }
     }
 
-    private func releaseSelectIfNeeded() {
+    private func releaseSelectIfNeeded(reason: String) {
         guard isSelectPressed else { return }
+        rmDebug("🖱 Select release fallback (\(reason))")
         isSelectPressed = false
         cursorController.isDragging = false
         cursorController.isClickActive = false
@@ -149,10 +154,12 @@ class RemoteInputHandler {
             isSelectPressed = true
             cursorController.isClickActive = true
             cursorController.isDragging = true
+            rmDebug("🖱 Select pressed → mouseDown")
             cursorController.mouseDown()
         } else if !pressed && isSelectPressed {
             isSelectPressed = false
             cursorController.isDragging = false
+            rmDebug("🖱 Select released → mouseUp")
             cursorController.mouseUp()
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
