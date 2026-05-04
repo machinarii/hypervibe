@@ -19,17 +19,47 @@ class CursorController {
     
     // MARK: - Helper Functions
     
-    /// Finds the screen containing the given point
-    /// Uses explicit bounds checking to handle coordinate system correctly
-    private func screenContaining(_ point: CGPoint) -> NSScreen? {
-        return NSScreen.screens.first { screen in
-            let frame = screen.frame
-            // Explicit bounds check (CGRect.contains can have edge cases)
-            return point.x >= frame.minX && 
-                   point.x < frame.maxX && 
-                   point.y >= frame.minY && 
-                   point.y < frame.maxY
+    /// Active display bounds in the same global display coordinate space used by CGEvent.
+    private func activeDisplayBounds() -> [CGRect] {
+        var displays = [CGDirectDisplayID](repeating: 0, count: 16)
+        var displayCount: UInt32 = 0
+        let result = displays.withUnsafeMutableBufferPointer { buffer in
+            CGGetActiveDisplayList(UInt32(buffer.count), buffer.baseAddress, &displayCount)
         }
+        guard result == .success else { return [] }
+        return displays.prefix(Int(displayCount)).map { CGDisplayBounds($0) }
+    }
+
+    private func boundsContaining(_ point: CGPoint, in bounds: [CGRect]) -> CGRect? {
+        bounds.first { frame in
+            point.x >= frame.minX &&
+            point.x < frame.maxX &&
+            point.y >= frame.minY &&
+            point.y < frame.maxY
+        }
+    }
+
+    private func clamp(_ point: CGPoint, to frame: CGRect) -> CGPoint {
+        CGPoint(
+            x: min(max(point.x, frame.minX), frame.maxX - 1),
+            y: min(max(point.y, frame.minY), frame.maxY - 1)
+        )
+    }
+
+    private func currentCursorPosition() -> CGPoint {
+        if let event = CGEvent(source: nil), event.location != .zero {
+            return event.location
+        }
+
+        let nsLocation = NSEvent.mouseLocation
+        if let mainScreen = NSScreen.main {
+            let mainFrame = mainScreen.frame
+            return CGPoint(
+                x: mainFrame.minX + nsLocation.x,
+                y: mainFrame.minY + (mainFrame.height - nsLocation.y)
+            )
+        }
+        return CGPoint(x: nsLocation.x, y: nsLocation.y)
     }
     
     // MARK: - Cursor Movement
@@ -40,58 +70,36 @@ class CursorController {
         let scaledDeltaX = deltaX * sensitivity * (abs(deltaX) > 5 ? acceleration : 1.0)
         let scaledDeltaY = deltaY * sensitivity * (abs(deltaY) > 5 ? acceleration : 1.0)
 
-            // Get current cursor position - use CGEvent which gives us global Quartz coordinates
-        // This works correctly across all displays
-        let beforePosition: CGPoint
-        if let event = CGEvent(source: nil), event.location != .zero {
-            beforePosition = event.location
+        let beforePosition = currentCursorPosition()
+        
+        let displays = activeDisplayBounds()
+        let currentBounds = boundsContaining(beforePosition, in: displays)
+        
+        let rawTargetPosition = CGPoint(
+            x: beforePosition.x + scaledDeltaX,
+            y: beforePosition.y + scaledDeltaY
+        )
+        
+        let targetPosition: CGPoint
+        if boundsContaining(rawTargetPosition, in: displays) != nil {
+            targetPosition = rawTargetPosition
+        } else if let currentBounds = currentBounds {
+            targetPosition = clamp(rawTargetPosition, to: currentBounds)
         } else {
-            // Fallback: use NSEvent and convert to Quartz coordinates
-            let nsLocation = NSEvent.mouseLocation
-            if let mainScreen = NSScreen.main {
-                let mainFrame = mainScreen.frame
-                let mainHeight = mainFrame.height
-                // NSEvent.mouseLocation is relative to main screen's bottom-left
-                // Convert to global Quartz coordinates
-                beforePosition = CGPoint(
-                    x: mainFrame.minX + nsLocation.x,
-                    y: mainFrame.minY + (mainHeight - nsLocation.y)
-                )
-            } else {
-                beforePosition = CGPoint(x: nsLocation.x, y: nsLocation.y)
-            }
+            targetPosition = rawTargetPosition
         }
+
+        let clampedX = abs(targetPosition.x - rawTargetPosition.x) > 0.001
+        let clampedY = abs(targetPosition.y - rawTargetPosition.y) > 0.001
         
-        // Find current screen containing cursor for edge detection
-        let currentScreen = screenContaining(beforePosition)
-        let screenFrame = currentScreen?.frame
-        
-        // Calculate target position - don't clamp, let macOS handle multi-monitor movement
-        let targetX = beforePosition.x + scaledDeltaX
-        let targetY = beforePosition.y + scaledDeltaY
-        let targetPosition = CGPoint(x: targetX, y: targetY)
-        
-        // Edge detection for CURRENT screen only (if we found one)
-        var clampedX = false
-        var clampedY = false
-        
-        if let frame = screenFrame {
-            // Only report clamped if we're at the edge of current screen AND trying to move further
-            let atLeftEdge = beforePosition.x <= frame.minX + 1 && scaledDeltaX < 0
-            let atRightEdge = beforePosition.x >= frame.maxX - 1 && scaledDeltaX > 0
-            let atTopEdge = beforePosition.y <= frame.minY + 1 && scaledDeltaY < 0
-            let atBottomEdge = beforePosition.y >= frame.maxY - 1 && scaledDeltaY > 0
-            
-            clampedX = atLeftEdge || atRightEdge
-            clampedY = atTopEdge || atBottomEdge
-        }
-        
-        // Post the event - macOS handles all coordinate system conversions and multi-monitor movement
         let eventType: CGEventType = isDragging ? .leftMouseDragged : .mouseMoved
         guard let event = CGEvent(mouseEventSource: nil, mouseType: eventType, mouseCursorPosition: targetPosition, mouseButton: .left) else {
             return (clampedX, clampedY)
         }
+        event.setIntegerValueField(.mouseEventDeltaX, value: Int64(scaledDeltaX.rounded()))
+        event.setIntegerValueField(.mouseEventDeltaY, value: Int64(scaledDeltaY.rounded()))
         event.post(tap: CGEventTapLocation.cghidEventTap)
+        CGWarpMouseCursorPosition(targetPosition)
 
         return (clampedX, clampedY)
     }
