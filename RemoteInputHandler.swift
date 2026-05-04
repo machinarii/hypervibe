@@ -24,9 +24,6 @@ class RemoteInputHandler {
     
     // Click/drag state
     private var isSelectPressed = false
-    private var selectPressTime: UInt64 = 0
-    private var isDragging = false
-    private let clickThreshold: Double = 0.25
     
     // Prevent double-processing with MediaKeyInterceptor
     static var lastProcessedButton: String?
@@ -46,9 +43,14 @@ class RemoteInputHandler {
         self.cursorController = cursorController
         self.menuBarManager = menuBarManager
     }
+
+    deinit {
+        releaseSelectIfNeeded(reason: "handler deinit")
+    }
     
     func setRemoteDevice(_ device: IOHIDDevice?) {
         guard let device = device else {
+            releaseSelectIfNeeded(reason: "device removed")
             releaseAllHeldKeys()
             for d in devices {
                 IOHIDDeviceRegisterInputValueCallback(d, nil, nil)
@@ -82,6 +84,15 @@ class RemoteInputHandler {
                 isFirstPressAfterConnection = true
             }
         }
+    }
+
+    private func releaseSelectIfNeeded(reason: String) {
+        guard isSelectPressed else { return }
+        rmDebug("🖱 Select release fallback (\(reason))")
+        isSelectPressed = false
+        cursorController.isDragging = false
+        cursorController.isClickActive = false
+        cursorController.mouseUp()
     }
     
     func handleInputValue(_ value: IOHIDValue) {
@@ -141,30 +152,15 @@ class RemoteInputHandler {
     private func handleSelectButton(pressed: Bool) {
         if pressed && !isSelectPressed {
             isSelectPressed = true
-            isDragging = false
-            selectPressTime = mach_absolute_time()
             cursorController.isClickActive = true
-            
-            // Start drag after threshold
-            DispatchQueue.main.asyncAfter(deadline: .now() + clickThreshold) { [weak self] in
-                guard let self = self, self.isSelectPressed && !self.isDragging else { return }
-                print("🔘 Select button: Drag started")
-                self.isDragging = true
-                self.cursorController.isDragging = true
-                self.cursorController.mouseDown()
-            }
+            cursorController.isDragging = true
+            rmDebug("🖱 Select pressed → mouseDown")
+            cursorController.mouseDown()
         } else if !pressed && isSelectPressed {
             isSelectPressed = false
-            
-            if isDragging {
-                print("🔘 Select button: Drag ended")
-                cursorController.isDragging = false
-                cursorController.mouseUp()
-            } else {
-                print("🔘 Select button: Click")
-                cursorController.performClick()
-            }
-            isDragging = false
+            cursorController.isDragging = false
+            rmDebug("🖱 Select released → mouseUp")
+            cursorController.mouseUp()
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 self?.cursorController.isClickActive = false
