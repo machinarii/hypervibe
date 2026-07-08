@@ -16,6 +16,7 @@ enum ButtonAction: String, CaseIterable {
     case escKey = "Esc: Navigate Back"
     case ctrlC = "Control + C: Cancel Prompt"
     case spaceKey = "Space: Claude Voice Dictation"
+    case fnKey = "Fn: WeChat / 3rd-party Voice Input"
     case rightCmd = "Right Command: 3rd-party Voice Dictation"
     case rightOpt = "Right Option: 3rd-party Voice Dictation"
     case trackpadClick = "Mouse Click"
@@ -26,7 +27,7 @@ enum ButtonAction: String, CaseIterable {
     /// only offered for hold-capable buttons.
     var requiresHold: Bool {
         switch self {
-        case .spaceKey, .rightCmd, .rightOpt: return true
+        case .spaceKey, .fnKey, .rightCmd, .rightOpt: return true
         default: return false
         }
     }
@@ -470,6 +471,8 @@ class MenuBarManager {
             sendKey(kVK_ANSI_C, flags: .maskControl)
         case .spaceKey:
             sendKey(kVK_Space)
+        case .fnKey:
+            sendFnKeyTap()
         case .rightCmd:
             sendModifierTap(kVK_RightCommand, flag: .maskCommand)
         case .rightOpt:
@@ -512,6 +515,25 @@ class MenuBarManager {
         let up = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: false)
         up?.flags = []
         up?.post(tap: .cghidEventTap)
+    }
+
+    /// Tap the Fn/Globe key via flagsChanged events (macOS treats Fn as a modifier,
+    /// not a regular key, so keyDown/keyUp for kVK_Function is silently ignored).
+    private func sendFnKeyTap() {
+        let src = CGEventSource(stateID: .hidSystemState)
+        if let down = CGEvent(source: src) {
+            down.type = .flagsChanged
+            down.setIntegerValueField(.keyboardEventKeycode, value: Int64(kVK_Function))
+            down.flags = .maskSecondaryFn
+            down.post(tap: .cghidEventTap)
+        }
+        usleep(10000)
+        if let up = CGEvent(source: src) {
+            up.type = .flagsChanged
+            up.setIntegerValueField(.keyboardEventKeycode, value: Int64(kVK_Function))
+            up.flags = []
+            up.post(tap: .cghidEventTap)
+        }
     }
     
     @objc private func quitApp() {
