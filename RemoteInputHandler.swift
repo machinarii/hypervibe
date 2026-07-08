@@ -15,7 +15,14 @@ class RemoteInputHandler {
     private let cursorController: CursorController
     private weak var menuBarManager: MenuBarManager?
     private var devices: [IOHIDDevice] = []
-    
+
+    /// Serial queue to stagger HID device seizes. Seizing multiple interfaces of the
+    /// same Bluetooth peripheral in rapid succession can crash the BT HID stack.
+    private let seizeQueue = DispatchQueue(label: "com.hypervibe.seize")
+    /// Devices waiting to be seized, protected by seizeQueue (serial).
+    private var pendingDevices: [IOHIDDevice] = []
+    private var seizeTimerActive = false
+
     /// Called on any button activity; use to trigger trackpad re-scan after remote wake.
     var onButtonActivity: (() -> Void)?
     
@@ -24,9 +31,6 @@ class RemoteInputHandler {
     
     // Click/drag state
     private var isSelectPressed = false
-    private var selectPressTime: UInt64 = 0
-    private var isDragging = false
-    private let clickThreshold: Double = 0.25
     
     // Prevent double-processing with MediaKeyInterceptor
     static var lastProcessedButton: String?
@@ -46,9 +50,19 @@ class RemoteInputHandler {
         self.cursorController = cursorController
         self.menuBarManager = menuBarManager
     }
+
+    deinit {
+        releaseSelectIfNeeded(reason: "handler deinit")
+    }
     
     func setRemoteDevice(_ device: IOHIDDevice?) {
         guard let device = device else {
+            // Cancel pending seizes and drain queue
+            seizeQueue.async { [weak self] in
+                self?.pendingDevices.removeAll()
+                self?.seizeTimerActive = false
+            }
+            releaseSelectIfNeeded(reason: "device removed")
             releaseAllHeldKeys()
             for d in devices {
                 IOHIDDeviceRegisterInputValueCallback(d, nil, nil)
@@ -59,29 +73,75 @@ class RemoteInputHandler {
             isFirstPressAfterConnection = false
             return
         }
-        
+
         guard !devices.contains(where: { $0 == device }) else { return }
-        
+
+        // Stagger seizing: multiple HID interfaces from the same Bluetooth peripheral
+        // arrive in rapid succession. Seizing them all synchronously can overwhelm the
+        // macOS Bluetooth HID stack and crash the controller. Queue each seize with a
+        // 150ms gap so the stack has time to settle between each one.
+        seizeQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.pendingDevices.append(device)
+            if !self.seizeTimerActive {
+                self.seizeTimerActive = true
+                self.drainNext()
+            }
+        }
+    }
+
+    /// Pick the next device from the pending queue and seize it with a 150ms delay.
+    private func drainNext() {
+        guard !pendingDevices.isEmpty else {
+            seizeTimerActive = false
+            return
+        }
+        let device = pendingDevices.removeFirst()
+        seizeQueue.asyncAfter(deadline: .now() + .milliseconds(150)) { [weak self] in
+            self?.seizeDeviceNow(device)
+            self?.drainNext()
+        }
+    }
+
+    /// Actually perform the IOHIDDeviceOpen+seize (called from the seize queue).
+    private func seizeDeviceNow(_ device: IOHIDDevice) {
+        let vendor = IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? Int ?? 0
+        let product = IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? Int ?? 0
+
         // Seize device to prevent system from handling events
         let openResult = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice))
 
         if openResult == kIOReturnSuccess {
             rmDebug(String(format: "🔒 SEIZED HID device (vendor=0x%X product=0x%X)",
-                  IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? Int ?? 0,
-                  IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? Int ?? 0))
-            IOHIDDeviceRegisterInputValueCallback(device, inputValueCallback, Unmanaged.passUnretained(self).toOpaque())
-            IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
-            devices.append(device)
-            isFirstPressAfterConnection = true
+                          vendor, product))
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                IOHIDDeviceRegisterInputValueCallback(device, inputValueCallback, Unmanaged.passUnretained(self).toOpaque())
+                IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
+                self.devices.append(device)
+                self.isFirstPressAfterConnection = true
+            }
         } else {
             rmDebug(String(format: "⚠️ FAILED to seize HID device (IOReturn=0x%X) — opening unseized", openResult))
             if IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess {
-                IOHIDDeviceRegisterInputValueCallback(device, inputValueCallback, Unmanaged.passUnretained(self).toOpaque())
-                IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
-                devices.append(device)
-                isFirstPressAfterConnection = true
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    IOHIDDeviceRegisterInputValueCallback(device, inputValueCallback, Unmanaged.passUnretained(self).toOpaque())
+                    IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
+                    self.devices.append(device)
+                    self.isFirstPressAfterConnection = true
+                }
             }
         }
+    }
+
+    private func releaseSelectIfNeeded(reason: String) {
+        guard isSelectPressed else { return }
+        rmDebug("🖱 Select release fallback (\(reason))")
+        isSelectPressed = false
+        cursorController.isDragging = false
+        cursorController.isClickActive = false
+        cursorController.mouseUp()
     }
     
     func handleInputValue(_ value: IOHIDValue) {
@@ -141,30 +201,15 @@ class RemoteInputHandler {
     private func handleSelectButton(pressed: Bool) {
         if pressed && !isSelectPressed {
             isSelectPressed = true
-            isDragging = false
-            selectPressTime = mach_absolute_time()
             cursorController.isClickActive = true
-            
-            // Start drag after threshold
-            DispatchQueue.main.asyncAfter(deadline: .now() + clickThreshold) { [weak self] in
-                guard let self = self, self.isSelectPressed && !self.isDragging else { return }
-                print("🔘 Select button: Drag started")
-                self.isDragging = true
-                self.cursorController.isDragging = true
-                self.cursorController.mouseDown()
-            }
+            cursorController.isDragging = true
+            rmDebug("🖱 Select pressed → mouseDown")
+            cursorController.mouseDown()
         } else if !pressed && isSelectPressed {
             isSelectPressed = false
-            
-            if isDragging {
-                print("🔘 Select button: Drag ended")
-                cursorController.isDragging = false
-                cursorController.mouseUp()
-            } else {
-                print("🔘 Select button: Click")
-                cursorController.performClick()
-            }
-            isDragging = false
+            cursorController.isDragging = false
+            rmDebug("🖱 Select released → mouseUp")
+            cursorController.mouseUp()
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 self?.cursorController.isClickActive = false
@@ -227,6 +272,8 @@ class RemoteInputHandler {
             break
         case .enterKey:
             sendKey(kVK_Return)
+        case .tabKey:
+            sendKey(kVK_Tab)
         case .upKey:
             sendKey(kVK_UpArrow)
         case .downKey:
@@ -235,7 +282,7 @@ class RemoteInputHandler {
             sendKey(kVK_Escape)
         case .ctrlC:
             sendKey(kVK_ANSI_C, flags: .maskControl)
-        case .spaceKey, .rightCmd, .rightOpt:
+        case .spaceKey, .fnKey, .rightCmd, .rightOpt:
             break // handled by handleHoldAction
         case .trackpadClick:
             cursorController.performClick()
@@ -244,6 +291,22 @@ class RemoteInputHandler {
 
     /// Press/release a virtual key mirroring the HID press duration (push-to-talk).
     private func handleHoldAction(_ action: ButtonAction, button: String, pressed: Bool) {
+        // Fn key uses flagsChanged events — the macOS Fn/Globe key is a modifier, not a
+        // regular key. Posting keyDown/keyUp for kVK_Function is silently ignored by most apps.
+        if action == .fnKey {
+            if pressed {
+                if heldKeys.removeValue(forKey: button) != nil {
+                    postFnKey(down: false)
+                }
+                postFnKey(down: true)
+                heldKeys[button] = (kVK_Function, .maskSecondaryFn)
+            } else {
+                guard heldKeys.removeValue(forKey: button) != nil else { return }
+                postFnKey(down: false)
+            }
+            return
+        }
+
         let spec: (keyCode: Int, flags: CGEventFlags)
         switch action {
         case .spaceKey: spec = (kVK_Space,        [])
@@ -265,10 +328,27 @@ class RemoteInputHandler {
         }
     }
 
+    /// Post a flagsChanged event for the Fn/Globe key.
+    /// Down: sets .maskSecondaryFn (0x800000) — the same bit apps like WeChat watch for.
+    /// Up: clears flags to release the modifier.
+    private func postFnKey(down: Bool) {
+        let src = CGEventSource(stateID: .hidSystemState)
+        if let event = CGEvent(source: src) {
+            event.type = .flagsChanged
+            event.setIntegerValueField(.keyboardEventKeycode, value: Int64(kVK_Function))
+            event.flags = down ? .maskSecondaryFn : []
+            event.post(tap: .cghidEventTap)
+        }
+    }
+
     /// Called on device removal to avoid stuck modifiers if the remote disconnects mid-hold.
     private func releaseAllHeldKeys() {
         for (_, held) in heldKeys {
-            postKey(keyCode: held.keyCode, flags: [], keyDown: false)
+            if held.flags == .maskSecondaryFn {
+                postFnKey(down: false)
+            } else {
+                postKey(keyCode: held.keyCode, flags: [], keyDown: false)
+            }
         }
         heldKeys.removeAll()
         buttonState.removeAll()

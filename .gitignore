@@ -1,6 +1,8 @@
 # Build artifacts
 Remotastic
 Remotastic.app/
+HyperVibe
+HyperVibe.app/
 
 # Xcode
 .swiftpm/
