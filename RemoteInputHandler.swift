@@ -272,6 +272,8 @@ class RemoteInputHandler {
             break
         case .enterKey:
             sendKey(kVK_Return)
+        case .tabKey:
+            sendKey(kVK_Tab)
         case .upKey:
             sendKey(kVK_UpArrow)
         case .downKey:
