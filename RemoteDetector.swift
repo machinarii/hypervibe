@@ -70,11 +70,16 @@ class RemoteDetector {
         IOHIDManagerRegisterDeviceRemovalCallback(manager, deviceRemovedCallback, Unmanaged.passUnretained(self).toOpaque())
 
         let openResult = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
-        guard openResult == kIOReturnSuccess else {
-            rmDebug(String(format: "⚠️ IOHIDManagerOpen failed (IOReturn=0x%X)", openResult))
-            return
+        if openResult == kIOReturnSuccess {
+            rmDebug("🛰 IOHIDManagerOpen success")
+        } else {
+            // Non-fatal: the vendor/matching dicts also match Apple's internally-held
+            // keyboard/trackpad interfaces, so a manager-wide open reports
+            // Unsupported/ExclusiveAccess even when the remote itself is free.
+            // Matching callbacks and per-device IOHIDDeviceOpen (RemoteInputHandler)
+            // do not depend on a successful manager open.
+            rmDebug(String(format: "⚠️ IOHIDManagerOpen failed (IOReturn=0x%X) — continuing, per-device open decides", openResult))
         }
-        rmDebug("🛰 IOHIDManagerOpen success")
 
         IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
 
