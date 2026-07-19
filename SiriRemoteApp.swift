@@ -135,21 +135,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case .mute:       buttonName = "mute"
         }
 
-        // Debounce: if the HID path just handled this button, don't double-fire.
+        // Consume ONLY events correlated with a press just seen on the remote's seized HID
+        // interface — those are remote-origin duplicates whose action the HID path already
+        // executed, and macOS's default media handling must not also fire for them.
+        // Everything else (Magic Keyboard media keys, other peripherals) is NOT ours:
+        // pass it through untouched so native volume/mute/HUD behavior keeps working.
         if RemoteInputHandler.lastProcessedButton == buttonName {
             let timeSinceLastProcess = Self.machDeltaToSeconds(from: RemoteInputHandler.lastProcessedTime)
             if timeSinceLastProcess < 0.2 {
                 return true
             }
         }
-
-        let action = menuBarManager.getMapping(for: buttonName)
-        if action != .none {
-            menuBarManager.executeAction(action.rawValue)
-        }
-        // Always consume — no action in this app corresponds to a system media key anymore,
-        // so we never want macOS's default media handler to fire.
-        return true
+        return false
     }
     
     // MARK: - Permissions

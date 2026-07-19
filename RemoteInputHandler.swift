@@ -20,7 +20,22 @@ class RemoteInputHandler {
     var onButtonActivity: (() -> Void)?
     
     // First press after connection: do not perform action (sound already played at connect).
+    // Only swallowed within a short window of the connect — a press arriving later is a real
+    // user press (post-sleep reconnects used to eat one press here, worsening wake latency).
     private var isFirstPressAfterConnection = false
+    private var connectionTime: UInt64 = 0
+    private let connectSwallowWindow: Double = 1.5
+
+    /// Auto-repeat timers for hold-to-repeat actions (scroll/volume), keyed by button.
+    private var repeatTimers: [String: Timer] = [:]
+
+    private static func secondsSince(_ startMach: UInt64) -> Double {
+        guard startMach > 0 else { return .infinity }
+        var info = mach_timebase_info_data_t(numer: 1, denom: 1)
+        mach_timebase_info(&info)
+        let delta = mach_absolute_time() &- startMach
+        return Double(delta) * Double(info.numer) / Double(info.denom) / 1_000_000_000.0
+    }
     
     // Click/drag state
     private var isSelectPressed = false
@@ -73,6 +88,7 @@ class RemoteInputHandler {
             IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
             devices.append(device)
             isFirstPressAfterConnection = true
+            connectionTime = mach_absolute_time()
         } else {
             rmDebug(String(format: "⚠️ FAILED to seize HID device (IOReturn=0x%X) — opening unseized", openResult))
             if IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess {
@@ -80,6 +96,7 @@ class RemoteInputHandler {
                 IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
                 devices.append(device)
                 isFirstPressAfterConnection = true
+                connectionTime = mach_absolute_time()
             }
         }
     }
@@ -104,6 +121,8 @@ class RemoteInputHandler {
         }
         buttonState[buttonName] = isPressed
 
+        let assigned = menuBarManager?.getMapping(for: buttonName) ?? .builtin(.none)
+
         // Volume keys on the Siri Remote also travel over BT AVRCP absolute-volume, which
         // coreaudiod honors below cghidEventTap. Arm the revert guard on every press so the
         // CoreAudio listener snaps the level back to the pre-press value.
@@ -111,10 +130,16 @@ class RemoteInputHandler {
             VolumeRevertGuard.shared.armFromRemoteButton()
         }
 
-        // First key-down after connection: skip so the connect handshake doesn't fire an action.
+        // First key-down after connection: skip so the connect handshake doesn't fire an
+        // action — but only within the swallow window. A press arriving later is the user.
         if intValue == 1 && isFirstPressAfterConnection {
             isFirstPressAfterConnection = false
-            return
+            let elapsed = Self.secondsSince(connectionTime)
+            if elapsed < connectSwallowWindow {
+                rmDebug(String(format: "⏭ swallowing connect-handshake press (%.2fs after connect)", elapsed))
+                return
+            }
+            rmDebug(String(format: "▶️ first press %.1fs after connect — treating as real input", elapsed))
         }
 
         // Select is the trackpad click — handled separately for click/drag semantics.
@@ -131,11 +156,10 @@ class RemoteInputHandler {
             RemoteInputHandler.lastProcessedTime = mach_absolute_time()
         }
 
-        let action = menuBarManager?.getMapping(for: buttonName) ?? ButtonAction.none
         if pressed {
-            print("🔘 Button pressed: \(buttonName) → \(action.rawValue)")
+            print("🔘 Button pressed: \(buttonName) → \(assigned.persisted)")
         }
-        executeAction(action, button: buttonName, pressed: pressed)
+        executeAction(assigned, button: buttonName, pressed: pressed)
     }
     
     private func handleSelectButton(pressed: Bool) {
@@ -215,30 +239,79 @@ class RemoteInputHandler {
     
     // MARK: - Action Execution
     
-    private func executeAction(_ action: ButtonAction, button: String, pressed: Bool) {
-        if action.requiresHold {
-            handleHoldAction(action, button: button, pressed: pressed)
-            return
+    private func executeAction(_ assigned: AssignedAction, button: String, pressed: Bool) {
+        switch assigned {
+        case .customKey(let keyCode, let flags, _):
+            // On hold-capable buttons, mirror the physical press duration (push-to-talk
+            // style — a dictation app's hold-hotkey sees the real hold). Tap elsewhere.
+            if holdCapableButtons.contains(button) {
+                if pressed {
+                    if let stale = heldKeys.removeValue(forKey: button) {
+                        postKey(keyCode: stale.keyCode, flags: [], keyDown: false)
+                    }
+                    postKey(keyCode: keyCode, flags: flags, keyDown: true)
+                    heldKeys[button] = (keyCode, flags)
+                } else if let held = heldKeys.removeValue(forKey: button) {
+                    postKey(keyCode: held.keyCode, flags: [], keyDown: false)
+                }
+                return
+            }
+            guard pressed else { return }
+            sendKey(keyCode, flags: flags)
+        case .builtin(let action):
+            if action.requiresHold {
+                handleHoldAction(action, button: button, pressed: pressed)
+                return
+            }
+            if action.repeatsWhileHeld {
+                handleRepeatAction(action, button: button, pressed: pressed)
+                return
+            }
+            // Tap actions fire once, on press only.
+            guard pressed else { return }
+            switch action {
+            case .none:
+                break
+            case .enterKey:
+                sendKey(kVK_Return)
+            case .upKey:
+                sendKey(kVK_UpArrow)
+            case .downKey:
+                sendKey(kVK_DownArrow)
+            case .escKey:
+                sendKey(kVK_Escape)
+            case .ctrlC:
+                sendKey(kVK_ANSI_C, flags: .maskControl)
+            case .spaceKey, .rightCmd, .rightOpt:
+                break // handled by handleHoldAction
+            case .scrollUp, .scrollDown:
+                break // handled by handleRepeatAction
+            case .trackpadClick:
+                cursorController.performClick()
+            }
         }
-        // Tap actions fire once, on press only.
-        guard pressed else { return }
+    }
+
+    /// Scroll/volume actions: fire once on press, then auto-repeat while held
+    /// (hold-capable buttons only — tap-only buttons get the single step).
+    private func handleRepeatAction(_ action: ButtonAction, button: String, pressed: Bool) {
+        let perform: () -> Void
         switch action {
-        case .none:
-            break
-        case .enterKey:
-            sendKey(kVK_Return)
-        case .upKey:
-            sendKey(kVK_UpArrow)
-        case .downKey:
-            sendKey(kVK_DownArrow)
-        case .escKey:
-            sendKey(kVK_Escape)
-        case .ctrlC:
-            sendKey(kVK_ANSI_C, flags: .maskControl)
-        case .spaceKey, .rightCmd, .rightOpt:
-            break // handled by handleHoldAction
-        case .trackpadClick:
-            cursorController.performClick()
+        case .scrollUp:         perform = { MenuBarManager.postScroll(lines: 3) }
+        case .scrollDown:       perform = { MenuBarManager.postScroll(lines: -3) }
+        default: return
+        }
+
+        if pressed {
+            perform()
+            if holdCapableButtons.contains(button) {
+                repeatTimers[button]?.invalidate()
+                let timer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { _ in perform() }
+                RunLoop.main.add(timer, forMode: .common)
+                repeatTimers[button] = timer
+            }
+        } else {
+            repeatTimers.removeValue(forKey: button)?.invalidate()
         }
     }
 
@@ -272,6 +345,8 @@ class RemoteInputHandler {
         }
         heldKeys.removeAll()
         buttonState.removeAll()
+        for (_, timer) in repeatTimers { timer.invalidate() }
+        repeatTimers.removeAll()
     }
 
     private func postKey(keyCode: Int, flags: CGEventFlags, keyDown: Bool) {

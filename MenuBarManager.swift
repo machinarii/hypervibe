@@ -19,6 +19,8 @@ enum ButtonAction: String, CaseIterable {
     case rightCmd = "Right Command: 3rd-party Voice Dictation"
     case rightOpt = "Right Option: 3rd-party Voice Dictation"
     case trackpadClick = "Mouse Click"
+    case scrollUp = "Scroll Up"
+    case scrollDown = "Scroll Down"
     case none = "None"
 
     /// Push-to-talk dictation needs the virtual key held for the full press duration.
@@ -29,6 +31,60 @@ enum ButtonAction: String, CaseIterable {
         case .spaceKey, .rightCmd, .rightOpt: return true
         default: return false
         }
+    }
+
+    /// Actions that auto-repeat while the button is held (scroll). Offered on all
+    /// buttons — on tap-only buttons they fire a single step per press.
+    var repeatsWhileHeld: Bool {
+        switch self {
+        case .scrollUp, .scrollDown: return true
+        default: return false
+        }
+    }
+}
+
+/// A button's assignment: a built-in action or a user-captured custom keystroke.
+/// Persisted as the ButtonAction rawValue, or "customKey:<code>:<flagsHex>:<display>".
+enum AssignedAction: Equatable {
+    case builtin(ButtonAction)
+    case customKey(keyCode: Int, flags: CGEventFlags, display: String)
+
+    var persisted: String {
+        switch self {
+        case .builtin(let a): return a.rawValue
+        case .customKey(let code, let flags, let display):
+            return "customKey:\(code):\(String(flags.rawValue, radix: 16)):\(display)"
+        }
+    }
+
+    static func from(persisted raw: String) -> AssignedAction? {
+        if let builtin = ButtonAction(rawValue: raw) { return .builtin(builtin) }
+        guard raw.hasPrefix("customKey:") else { return nil }
+        let parts = raw.split(separator: ":", maxSplits: 3, omittingEmptySubsequences: false)
+        guard parts.count == 4,
+              let code = Int(parts[1]),
+              let flagsRaw = UInt64(parts[2], radix: 16) else { return nil }
+        return .customKey(keyCode: code, flags: CGEventFlags(rawValue: flagsRaw), display: String(parts[3]))
+    }
+}
+
+/// A swipe's assignment: a built-in action or a user-entered text command.
+/// Persisted as the SwipeAction rawValue, or "customCmd:<text>".
+enum AssignedSwipe: Equatable {
+    case builtin(SwipeAction)
+    case customCmd(String)
+
+    var persisted: String {
+        switch self {
+        case .builtin(let a): return a.rawValue
+        case .customCmd(let text): return "customCmd:\(text)"
+        }
+    }
+
+    static func from(persisted raw: String) -> AssignedSwipe? {
+        if let builtin = SwipeAction(rawValue: raw) { return .builtin(builtin) }
+        guard raw.hasPrefix("customCmd:") else { return nil }
+        return .customCmd(String(raw.dropFirst("customCmd:".count)))
     }
 }
 
@@ -88,16 +144,19 @@ class MenuBarManager {
     private let statusMenuItem: NSMenuItem
     
     // Button mappings (stored in UserDefaults)
-    private var buttonMappings: [String: ButtonAction] = [:]
+    private var buttonMappings: [String: AssignedAction] = [:]
 
     // Swipe gesture mappings (stored in UserDefaults under "swipeMappings").
-    private var swipeMappings: [SwipeDirection: SwipeAction] = [:]
+    private var swipeMappings: [SwipeDirection: AssignedSwipe] = [:]
 
-    private static let defaultSwipeMappings: [SwipeDirection: SwipeAction] = [
-        .up:    .usage,
-        .down:  .compact,
-        .left:  .model,
-        .right: .modeSwitch,
+    // Retained while a capture panel is open.
+    private let keyCapture = KeyCaptureController()
+
+    private static let defaultSwipeMappings: [SwipeDirection: AssignedSwipe] = [
+        .up:    .builtin(.usage),
+        .down:  .builtin(.compact),
+        .left:  .builtin(.model),
+        .right: .builtin(.modeSwitch),
     ]
 
     // Scroll speed (used for trackpad scroll scale; no menu, native multitouch)
@@ -113,19 +172,30 @@ class MenuBarManager {
         
         loadMappings()
         loadSwipeMappings()
+        // Touchpad mode (default: full cursor + gestures).
+        if UserDefaults.standard.object(forKey: "touchpadCursorEnabled") != nil {
+            TouchHandler.cursorEnabled = UserDefaults.standard.bool(forKey: "touchpadCursorEnabled")
+        }
         setupMenuBar()
+    }
+
+    @objc private func setTouchpadMode(_ sender: NSMenuItem) {
+        guard let enabled = sender.representedObject as? Bool else { return }
+        TouchHandler.cursorEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "touchpadCursorEnabled")
+        rebuildMenu()
     }
     
     private func loadMappings() {
         // Default mappings (only used on first launch / after schema upgrade)
-        let defaultMappings: [String: ButtonAction] = [
-            "playPause": .enterKey,
-            "menu": .escKey,
-            "select": .trackpadClick,
-            "volumeUp": .upKey,
-            "volumeDown": .downKey,
-            "siri": .spaceKey,
-            "tv": .ctrlC
+        let defaultMappings: [String: AssignedAction] = [
+            "playPause": .builtin(.enterKey),
+            "menu": .builtin(.escKey),
+            "select": .builtin(.trackpadClick),
+            "volumeUp": .builtin(.upKey),
+            "volumeDown": .builtin(.downKey),
+            "siri": .builtin(.spaceKey),
+            "tv": .builtin(.ctrlC)
         ]
 
         // Schema version bumps:
@@ -148,7 +218,7 @@ class MenuBarManager {
 
         if let saved = UserDefaults.standard.dictionary(forKey: "buttonMappings") as? [String: String] {
             for (button, actionRaw) in saved {
-                if let action = ButtonAction(rawValue: actionRaw) {
+                if let action = AssignedAction.from(persisted: actionRaw) {
                     buttonMappings[button] = action
                 }
             }
@@ -158,19 +228,22 @@ class MenuBarManager {
                 }
             }
             // Defensive: if a hold-required action got persisted against a tap-only button, reset to none.
-            for (button, action) in buttonMappings where action.requiresHold && !holdCapableButtons.contains(button) {
-                buttonMappings[button] = ButtonAction.none
+            for (button, action) in buttonMappings {
+                if case .builtin(let builtin) = action,
+                   builtin.requiresHold, !holdCapableButtons.contains(button) {
+                    buttonMappings[button] = .builtin(.none)
+                }
             }
         } else {
             buttonMappings = defaultMappings
             saveMappings()
         }
     }
-    
+
     private func saveMappings() {
         var toSave: [String: String] = [:]
         for (button, action) in buttonMappings {
-            toSave[button] = action.rawValue
+            toSave[button] = action.persisted
         }
         UserDefaults.standard.set(toSave, forKey: "buttonMappings")
     }
@@ -276,11 +349,26 @@ class MenuBarManager {
                 actionItem.target = self
                 actionItem.representedObject = (key, action)
 
-                if buttonMappings[key] == action {
+                if buttonMappings[key] == .builtin(action) {
                     actionItem.state = .on
                 }
 
                 actionSubmenu.addItem(actionItem)
+            }
+
+            // Custom keystroke assignment. Not offered for "select": its press is consumed
+            // by click/drag handling before mappings are consulted.
+            if key != "select" {
+                actionSubmenu.addItem(NSMenuItem.separator())
+                if case .customKey(_, _, let display)? = buttonMappings[key] {
+                    let current = NSMenuItem(title: "Custom: \(display)", action: nil, keyEquivalent: "")
+                    current.state = .on
+                    actionSubmenu.addItem(current)
+                }
+                let captureItem = NSMenuItem(title: "Custom Key…", action: #selector(captureCustomKey(_:)), keyEquivalent: "")
+                captureItem.target = self
+                captureItem.representedObject = (key, label)
+                actionSubmenu.addItem(captureItem)
             }
 
             buttonItem.submenu = actionSubmenu
@@ -310,16 +398,45 @@ class MenuBarManager {
                 let actionItem = NSMenuItem(title: action.rawValue, action: #selector(changeSwipeMapping(_:)), keyEquivalent: "")
                 actionItem.target = self
                 actionItem.representedObject = (direction, action)
-                if swipeMappings[direction] == action {
+                if swipeMappings[direction] == .builtin(action) {
                     actionItem.state = .on
                 }
                 actionsMenu.addItem(actionItem)
             }
+
+            // Custom text command (typed verbatim on swipe).
+            actionsMenu.addItem(NSMenuItem.separator())
+            if case .customCmd(let text)? = swipeMappings[direction] {
+                let current = NSMenuItem(title: "Custom: \(text)", action: nil, keyEquivalent: "")
+                current.state = .on
+                actionsMenu.addItem(current)
+            }
+            let promptItem = NSMenuItem(title: "Custom Command…", action: #selector(promptCustomCommand(_:)), keyEquivalent: "")
+            promptItem.target = self
+            promptItem.representedObject = (direction, label)
+            actionsMenu.addItem(promptItem)
+
             dirItem.submenu = actionsMenu
             swipeSubmenu.addItem(dirItem)
         }
         swipeItem.submenu = swipeSubmenu
         menu.addItem(swipeItem)
+
+        // Touchpad mode: full (cursor + gestures) vs gestures-only (no cursor, no tap-click).
+        let modeItem = NSMenuItem(title: "Touchpad Mode", action: nil, keyEquivalent: "")
+        let modeMenu = NSMenu()
+        let fullItem = NSMenuItem(title: "Cursor + Gestures", action: #selector(setTouchpadMode(_:)), keyEquivalent: "")
+        fullItem.target = self
+        fullItem.representedObject = true
+        fullItem.state = TouchHandler.cursorEnabled ? .on : .off
+        modeMenu.addItem(fullItem)
+        let gesturesItem = NSMenuItem(title: "Gestures Only (no cursor)", action: #selector(setTouchpadMode(_:)), keyEquivalent: "")
+        gesturesItem.target = self
+        gesturesItem.representedObject = false
+        gesturesItem.state = TouchHandler.cursorEnabled ? .off : .on
+        modeMenu.addItem(gesturesItem)
+        modeItem.submenu = modeMenu
+        menu.addItem(modeItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -333,7 +450,7 @@ class MenuBarManager {
         guard let (buttonKey, action) = sender.representedObject as? (String, ButtonAction) else {
             return
         }
-        buttonMappings[buttonKey] = action
+        buttonMappings[buttonKey] = .builtin(action)
         saveMappings()
         rebuildMenu()
     }
@@ -342,9 +459,49 @@ class MenuBarManager {
         guard let (direction, action) = sender.representedObject as? (SwipeDirection, SwipeAction) else {
             return
         }
-        swipeMappings[direction] = action
+        swipeMappings[direction] = .builtin(action)
         saveSwipeMappings()
         rebuildMenu()
+    }
+
+    @objc private func captureCustomKey(_ sender: NSMenuItem) {
+        guard let (buttonKey, label) = sender.representedObject as? (String, String) else { return }
+        keyCapture.begin(forButtonLabel: label) { [weak self] captured in
+            guard let self = self, let captured = captured else { return }
+            self.buttonMappings[buttonKey] = .customKey(keyCode: captured.keyCode,
+                                                        flags: captured.flags,
+                                                        display: captured.display)
+            self.saveMappings()
+            self.rebuildMenu()
+        }
+    }
+
+    @objc private func promptCustomCommand(_ sender: NSMenuItem) {
+        guard let (direction, label) = sender.representedObject as? (SwipeDirection, String) else { return }
+        let alert = NSAlert()
+        alert.messageText = "Custom Command — \(label)"
+        alert.informativeText = "Whatever you enter is typed into the focused window, exactly as written."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        if case .customCmd(let existing)? = swipeMappings[direction] {
+            field.stringValue = existing
+        } else {
+            field.stringValue = "/"
+        }
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Use")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            // Keep the text verbatim — leading/trailing spaces are intentional (e.g. a
+            // slash command plus trailing space, ready for dictation). Trim only to
+            // reject an effectively-empty entry.
+            let text = field.stringValue
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            swipeMappings[direction] = .customCmd(text)
+            saveSwipeMappings()
+            rebuildMenu()
+        }
     }
     
     func updateConnectionStatus(connected: Bool) {
@@ -355,8 +512,8 @@ class MenuBarManager {
         }
     }
     
-    func getMapping(for button: String) -> ButtonAction {
-        return buttonMappings[button] ?? .none
+    func getMapping(for button: String) -> AssignedAction {
+        return buttonMappings[button] ?? .builtin(.none)
     }
     
     // Map HID codes to button names
@@ -379,14 +536,14 @@ class MenuBarManager {
               let action = buttonMappings[buttonName] else {
             return nil
         }
-        return action.rawValue
+        return action.persisted
     }
     
     private func loadSwipeMappings() {
         if let saved = UserDefaults.standard.dictionary(forKey: "swipeMappings") as? [String: String] {
             for (dirRaw, actionRaw) in saved {
                 if let dir = SwipeDirection(rawValue: dirRaw),
-                   let act = SwipeAction(rawValue: actionRaw) {
+                   let act = AssignedSwipe.from(persisted: actionRaw) {
                     swipeMappings[dir] = act
                 }
             }
@@ -400,35 +557,40 @@ class MenuBarManager {
     private func saveSwipeMappings() {
         var toSave: [String: String] = [:]
         for (dir, act) in swipeMappings {
-            toSave[dir.rawValue] = act.rawValue
+            toSave[dir.rawValue] = act.persisted
         }
         UserDefaults.standard.set(toSave, forKey: "swipeMappings")
     }
 
-    func getSwipeMapping(for direction: SwipeDirection) -> SwipeAction {
-        return swipeMappings[direction] ?? .none
+    func getSwipeMapping(for direction: SwipeDirection) -> AssignedSwipe {
+        return swipeMappings[direction] ?? .builtin(.none)
     }
 
     /// Execute the action bound to a swipe direction. Slash-command actions type text
     /// (no Enter — user presses Enter themselves). Arrow/modifier actions send key events.
     func executeSwipe(_ direction: SwipeDirection) {
-        let action = swipeMappings[direction] ?? SwipeAction.none
-        switch action {
-        case .none:
-            break
-        case .leftArrow:
-            sendKey(kVK_LeftArrow)
-        case .rightArrow:
-            sendKey(kVK_RightArrow)
-        case .modeSwitch:
-            sendKey(kVK_Tab, flags: .maskShift)
-        case .btw, .schedule, .ultrathink:
-            // Trailing space: user typically continues with an argument or prose.
-            typeString(action.rawValue + " ")
-        case .compact, .config, .context, .effort, .`init`,
-             .model, .remoteControl, .tasks, .usage:
-            // No trailing space: these commands stand alone or open an interactive picker.
-            typeString(action.rawValue)
+        switch swipeMappings[direction] ?? .builtin(.none) {
+        case .customCmd(let text):
+            // User-entered text, typed verbatim (no Enter — same convention as built-ins).
+            typeString(text)
+        case .builtin(let action):
+            switch action {
+            case .none:
+                break
+            case .leftArrow:
+                sendKey(kVK_LeftArrow)
+            case .rightArrow:
+                sendKey(kVK_RightArrow)
+            case .modeSwitch:
+                sendKey(kVK_Tab, flags: .maskShift)
+            case .btw, .schedule, .ultrathink:
+                // Trailing space: user typically continues with an argument or prose.
+                typeString(action.rawValue + " ")
+            case .compact, .config, .context, .effort, .`init`,
+                 .model, .remoteControl, .tasks, .usage:
+                // No trailing space: these commands stand alone or open an interactive picker.
+                typeString(action.rawValue)
+            }
         }
     }
 
@@ -451,32 +613,49 @@ class MenuBarManager {
         }
     }
 
-    /// Execute an action by name
+    /// Execute an action by persisted name (built-in rawValue or custom-key spec).
     func executeAction(_ actionName: String) {
-        guard let action = ButtonAction(rawValue: actionName) else { return }
+        guard let assigned = AssignedAction.from(persisted: actionName) else { return }
 
-        switch action {
-        case .none:
-            break
-        case .enterKey:
-            sendKey(kVK_Return)
-        case .upKey:
-            sendKey(kVK_UpArrow)
-        case .downKey:
-            sendKey(kVK_DownArrow)
-        case .escKey:
-            sendKey(kVK_Escape)
-        case .ctrlC:
-            sendKey(kVK_ANSI_C, flags: .maskControl)
-        case .spaceKey:
-            sendKey(kVK_Space)
-        case .rightCmd:
-            sendModifierTap(kVK_RightCommand, flag: .maskCommand)
-        case .rightOpt:
-            sendModifierTap(kVK_RightOption, flag: .maskAlternate)
-        case .trackpadClick:
-            performClick()
+        switch assigned {
+        case .customKey(let keyCode, let flags, _):
+            sendKey(keyCode, flags: flags)
+        case .builtin(let action):
+            switch action {
+            case .none:
+                break
+            case .enterKey:
+                sendKey(kVK_Return)
+            case .upKey:
+                sendKey(kVK_UpArrow)
+            case .downKey:
+                sendKey(kVK_DownArrow)
+            case .escKey:
+                sendKey(kVK_Escape)
+            case .ctrlC:
+                sendKey(kVK_ANSI_C, flags: .maskControl)
+            case .spaceKey:
+                sendKey(kVK_Space)
+            case .rightCmd:
+                sendModifierTap(kVK_RightCommand, flag: .maskCommand)
+            case .rightOpt:
+                sendModifierTap(kVK_RightOption, flag: .maskAlternate)
+            case .trackpadClick:
+                performClick()
+            case .scrollUp:
+                Self.postScroll(lines: 3)
+            case .scrollDown:
+                Self.postScroll(lines: -3)
+            }
         }
+    }
+
+    /// Post a synthetic scroll-wheel event. Positive lines scroll up (content down).
+    static func postScroll(lines: Int32) {
+        let event = CGEvent(scrollWheelEvent2Source: CGEventSource(stateID: .hidSystemState),
+                            units: .line, wheelCount: 1,
+                            wheel1: lines, wheel2: 0, wheel3: 0)
+        event?.post(tap: .cghidEventTap)
     }
 
     private func performClick() {
