@@ -22,7 +22,12 @@ private func touchCallback(device: MTDevice?,
 }
 
 class TouchHandler {
-    
+
+    /// Touchpad mode: when false, the touch surface drives gestures only — swipes and
+    /// two-finger scroll still fire, but one-finger cursor movement and tap-to-click are
+    /// suppressed. Set by MenuBarManager (persisted there); default is full behavior.
+    static var cursorEnabled: Bool = true
+
     /// mach_absolute_time() is in machine-dependent units; convert to seconds via timebase.
     private static let machTimebase: (numer: UInt32, denom: UInt32) = {
         var info = mach_timebase_info_data_t(numer: 0, denom: 0)
@@ -279,6 +284,10 @@ class TouchHandler {
         
         // Process based on finger count: 1 finger = cursor, 2 fingers = scroll
         if activeTouchCount == 1 && lastTouchCount == 1 {
+            if !Self.cursorEnabled {
+                // Gestures-only mode: track raw position for swipe classification, no cursor.
+                lastTouchPosition = currentPos
+            } else {
             let clamped = moveCursor(deltaX: deltaX, deltaY: deltaY)
             // Only advance touch tracking if cursor wasn't clamped in that direction
             if let lastPos = lastTouchPosition {
@@ -290,6 +299,7 @@ class TouchHandler {
                 )
             } else {
                 lastTouchPosition = currentPos
+            }
             }
         } else if activeTouchCount == 2 && lastTouchCount == 2 {
             // Two fingers: always scroll regardless of mode
@@ -340,7 +350,7 @@ class TouchHandler {
             }
         }
 
-        if duration < tapMaxDuration && movement < tapMaxDistance {
+        if Self.cursorEnabled && duration < tapMaxDuration && movement < tapMaxDistance {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.cursorController.performClick()
