@@ -146,21 +146,62 @@ class TouchHandler {
         findAndStartDevice()
     }
     
+    /// Parse a device ID string as hex ("0x786601CA") or decimal.
+    private static func parseDeviceID(_ s: String) -> UInt64? {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        if t.lowercased().hasPrefix("0x") { return UInt64(t.dropFirst(2), radix: 16) }
+        return UInt64(t)
+    }
+
     private func findAndStartDevice() {
         guard let cfArray = MTDeviceCreateList()?.takeRetainedValue() else { return }
         let deviceList = cfArray as [MTDevice]
-        // Find non-built-in device (Siri Remote)
+
+        // Optional explicit pin, for setups the heuristic can't guess:
+        //   defaults write com.hypervibe.app trackpadDeviceID -string 0x786601CA
+        // Candidate IDs are logged below on every scan. Unset = auto-select.
+        let pinnedID = UserDefaults.standard.string(forKey: "trackpadDeviceID")
+            .flatMap(Self.parseDeviceID)
+
+        // Auto-select: only a device whose surface geometry matches the Siri Remote's known
+        // touch surface (RemoteTouchSurface.isEligibleRemoteSurface) is eligible. This is the
+        // touch-path analogue of RemoteDetector.isSiriRemote's vendor/product-ID match for the
+        // HID button path — MTDevice exposes no vendor/product ID, so surface size is the
+        // identity signal instead. A Magic Trackpad (or any other multitouch device) never
+        // qualifies, so it is never opened and its swipes never become gesture commands.
+        // Fails closed: if no candidate qualifies, no device is selected at all — better to
+        // miss a genuine remote (rare, and it will be picked up on the next scan) than to
+        // silently adopt an unrelated trackpad as "the remote".
+        var chosen: (dev: MTDevice, area: Int64)? = nil
         for dev in deviceList {
-            if !MTDeviceIsBuiltIn(dev) {
+            var devID: UInt64 = 0
+            var w: Int32 = 0, h: Int32 = 0
+            MTDeviceGetDeviceID(dev, &devID)
+            MTDeviceGetSensorSurfaceDimensions(dev, &w, &h)
+            let builtIn = MTDeviceIsBuiltIn(dev)
+            rmDebug(String(format: "📱 MT candidate id=0x%llX surface=%dx%d builtIn=%@",
+                           devID, w, h, builtIn ? "yes" : "no"))
+            if let pinnedID = pinnedID, devID == pinnedID {
+                rmDebug(String(format: "📱 selecting pinned MT device 0x%llX", devID))
                 startDevice(dev)
                 return
             }
+            guard pinnedID == nil else { continue }
+            guard RemoteTouchSurface.isEligibleRemoteSurface(width: w, height: h, builtIn: builtIn) else { continue }
+            let area = Int64(w) * Int64(h)
+            if chosen == nil || area < chosen!.area {
+                chosen = (dev, area)
+            }
         }
-        // Fallback: use second device if available
-        if deviceList.count > 1 {
-            startDevice(deviceList[1])
-        } else if device != nil {
-            // Clear stale ref so next checkAndReconnect will retry when the remote reappears in the list.
+        if let chosen = chosen {
+            startDevice(chosen.dev)
+            return
+        }
+        // No eligible remote-sized surface found (and no pin matched): fail closed, do not
+        // guess at a fallback device.
+        if device != nil {
+            // Previously-selected device no longer qualifies or disappeared from the list;
+            // clear the stale ref so the next checkAndReconnect retries when the remote reappears.
             stopDevice()
         }
     }
@@ -174,7 +215,9 @@ class TouchHandler {
         MTDeviceStart(dev, 0)
         // Reset so we don't immediately re-enter starvation and restart every 2s when no touches yet.
         lastTouchTime = mach_absolute_time()
-        print("📱 Trackpad device connected and started")
+        var devID: UInt64 = 0
+        MTDeviceGetDeviceID(dev, &devID)
+        rmDebug(String(format: "📱 Trackpad device connected and started (id=0x%llX)", devID))
     }
     
     private func stopDevice() {
@@ -182,8 +225,8 @@ class TouchHandler {
         MTUnregisterContactFrameCallback(dev, touchCallback)
         MTDeviceStop(dev)
         device = nil
-        
-        print("📱 Trackpad device disconnected")
+
+        rmDebug("📱 Trackpad device disconnected")
         lastTouchPosition = nil
         lastTouchCount = 0
         hadMultipleFingersInSession = false
