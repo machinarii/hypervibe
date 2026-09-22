@@ -239,6 +239,8 @@ class RemoteInputHandler {
             break // handled by handleHoldAction
         case .trackpadClick:
             cursorController.performClick()
+        case .customShortcut:
+            menuBarManager?.executeCustomShortcut(for: button)
         }
     }
 

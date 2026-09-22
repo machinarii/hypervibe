@@ -19,6 +19,7 @@ enum ButtonAction: String, CaseIterable {
     case rightCmd = "Right Command: 3rd-party Voice Dictation"
     case rightOpt = "Right Option: 3rd-party Voice Dictation"
     case trackpadClick = "Mouse Click"
+    case customShortcut = "Custom Shortcut"
     case none = "None"
 
     /// Push-to-talk dictation needs the virtual key held for the full press duration.
@@ -28,6 +29,112 @@ enum ButtonAction: String, CaseIterable {
         switch self {
         case .spaceKey, .rightCmd, .rightOpt: return true
         default: return false
+        }
+    }
+}
+
+/// A keyboard shortcut recorded from the user. Modifier key codes are stored directly so
+/// left and right Command/Option/Control/Shift remain distinct when replayed.
+private struct CustomShortcut: Codable {
+    let keyCode: UInt16?
+    let keyDisplay: String?
+    let modifierKeyCodes: [UInt16]
+
+    var displayName: String {
+        let modifiers = modifierKeyCodes.map(Self.modifierDisplay).joined(separator: " + ")
+        let key = keyDisplay ?? ""
+        if modifiers.isEmpty { return key }
+        if key.isEmpty { return modifiers }
+        return "\(modifiers) + \(key)"
+    }
+
+    private static func modifierDisplay(_ keyCode: UInt16) -> String {
+        switch Int(keyCode) {
+        case kVK_Command:      return "Left Command"
+        case kVK_RightCommand: return "Right Command"
+        case kVK_Option:       return "Left Option"
+        case kVK_RightOption:  return "Right Option"
+        case kVK_Control:      return "Left Control"
+        case kVK_RightControl: return "Right Control"
+        case kVK_Shift:        return "Left Shift"
+        case kVK_RightShift:   return "Right Shift"
+        case kVK_Function:     return "Fn"
+        case kVK_CapsLock:     return "Caps Lock"
+        default:               return "Key \(keyCode)"
+        }
+    }
+}
+
+/// Collects one shortcut while an alert is open. It records physical modifier key codes from
+/// flagsChanged events, rather than only modifier flags, to preserve left/right modifiers.
+private final class ShortcutRecorder {
+    private static let modifierKeyCodes: Set<UInt16> = [
+        UInt16(kVK_Command), UInt16(kVK_RightCommand),
+        UInt16(kVK_Option), UInt16(kVK_RightOption),
+        UInt16(kVK_Control), UInt16(kVK_RightControl),
+        UInt16(kVK_Shift), UInt16(kVK_RightShift),
+        UInt16(kVK_Function), UInt16(kVK_CapsLock),
+    ]
+
+    private var recordedModifierKeyCodes: Set<UInt16> = []
+    private(set) var shortcut: CustomShortcut?
+
+    @discardableResult
+    func record(_ event: NSEvent) -> Bool {
+        switch event.type {
+        case .flagsChanged:
+            guard Self.modifierKeyCodes.contains(event.keyCode) else { return false }
+            recordedModifierKeyCodes.insert(event.keyCode)
+            shortcut = CustomShortcut(
+                keyCode: nil,
+                keyDisplay: nil,
+                modifierKeyCodes: orderedModifiers()
+            )
+            return true
+        case .keyDown:
+            guard !event.isARepeat else { return true }
+            if Self.modifierKeyCodes.contains(event.keyCode) {
+                recordedModifierKeyCodes.insert(event.keyCode)
+                shortcut = CustomShortcut(
+                    keyCode: nil,
+                    keyDisplay: nil,
+                    modifierKeyCodes: orderedModifiers()
+                )
+            } else {
+                shortcut = CustomShortcut(
+                    keyCode: event.keyCode,
+                    keyDisplay: Self.displayName(for: event),
+                    modifierKeyCodes: orderedModifiers()
+                )
+            }
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func orderedModifiers() -> [UInt16] {
+        recordedModifierKeyCodes.sorted()
+    }
+
+    private static func displayName(for event: NSEvent) -> String {
+        switch Int(event.keyCode) {
+        case kVK_Return:       return "Return"
+        case kVK_Tab:          return "Tab"
+        case kVK_Space:        return "Space"
+        case kVK_Delete:       return "Delete"
+        case kVK_ForwardDelete:return "Forward Delete"
+        case kVK_Escape:       return "Escape"
+        case kVK_LeftArrow:    return "Left Arrow"
+        case kVK_RightArrow:   return "Right Arrow"
+        case kVK_UpArrow:      return "Up Arrow"
+        case kVK_DownArrow:    return "Down Arrow"
+        case kVK_Home:         return "Home"
+        case kVK_End:          return "End"
+        case kVK_PageUp:       return "Page Up"
+        case kVK_PageDown:     return "Page Down"
+        default:
+            return event.charactersIgnoringModifiers?.uppercased() ?? "Key \(event.keyCode)"
         }
     }
 }
@@ -90,6 +197,9 @@ class MenuBarManager {
     // Button mappings (stored in UserDefaults)
     private var buttonMappings: [String: ButtonAction] = [:]
 
+    // Custom keyboard shortcuts, stored separately from the built-in action selection.
+    private var customShortcuts: [String: CustomShortcut] = [:]
+
     // Swipe gesture mappings (stored in UserDefaults under "swipeMappings").
     private var swipeMappings: [SwipeDirection: SwipeAction] = [:]
 
@@ -128,10 +238,13 @@ class MenuBarManager {
             "tv": .ctrlC
         ]
 
+        loadCustomShortcuts()
+
         // Schema version bumps:
         //   v3: old media-key actions removed — drop all saved button mappings
         //   v4: "select" default changed from .enterKey to .trackpadClick — reset just that entry
-        let currentSchema = 4
+        //   v5: custom shortcut mappings added (no migration needed)
+        let currentSchema = 5
         let savedSchema = UserDefaults.standard.integer(forKey: "buttonMappingsSchema")
         if savedSchema < 3 {
             UserDefaults.standard.removeObject(forKey: "buttonMappings")
@@ -161,6 +274,10 @@ class MenuBarManager {
             for (button, action) in buttonMappings where action.requiresHold && !holdCapableButtons.contains(button) {
                 buttonMappings[button] = ButtonAction.none
             }
+            // A saved custom action without its accompanying shortcut cannot be dispatched.
+            for (button, action) in buttonMappings where action == .customShortcut && customShortcuts[button] == nil {
+                buttonMappings[button] = ButtonAction.none
+            }
         } else {
             buttonMappings = defaultMappings
             saveMappings()
@@ -173,6 +290,17 @@ class MenuBarManager {
             toSave[button] = action.rawValue
         }
         UserDefaults.standard.set(toSave, forKey: "buttonMappings")
+        saveCustomShortcuts()
+    }
+
+    private func loadCustomShortcuts() {
+        guard let data = UserDefaults.standard.data(forKey: "customButtonShortcuts") else { return }
+        customShortcuts = (try? JSONDecoder().decode([String: CustomShortcut].self, from: data)) ?? [:]
+    }
+
+    private func saveCustomShortcuts() {
+        guard let data = try? JSONEncoder().encode(customShortcuts) else { return }
+        UserDefaults.standard.set(data, forKey: "customButtonShortcuts")
     }
     
     /// Procedurally draw the menu-bar icon — a walkie-talkie glyph mirroring the
@@ -271,10 +399,23 @@ class MenuBarManager {
                 if action.requiresHold && !canHold { continue }
                 // Mouse Click is only meaningful for the trackpad click button.
                 if action == .trackpadClick && key != "select" { continue }
+                // Trackpad Click remains reserved for pointer click/drag behavior.
+                if action == .customShortcut && key == "select" { continue }
 
-                let actionItem = NSMenuItem(title: action.rawValue, action: #selector(changeMapping(_:)), keyEquivalent: "")
+                let isCustomShortcut = action == .customShortcut
+                let actionTitle: String
+                if isCustomShortcut, let shortcut = customShortcuts[key] {
+                    actionTitle = "Custom: \(shortcut.displayName)"
+                } else {
+                    actionTitle = action.rawValue + (isCustomShortcut ? "…" : "")
+                }
+                let actionItem = NSMenuItem(
+                    title: actionTitle,
+                    action: isCustomShortcut ? #selector(editCustomShortcut(_:)) : #selector(changeMapping(_:)),
+                    keyEquivalent: ""
+                )
                 actionItem.target = self
-                actionItem.representedObject = (key, action)
+                actionItem.representedObject = isCustomShortcut ? key : (key, action)
 
                 if buttonMappings[key] == action {
                     actionItem.state = .on
@@ -334,6 +475,51 @@ class MenuBarManager {
             return
         }
         buttonMappings[buttonKey] = action
+        customShortcuts.removeValue(forKey: buttonKey)
+        saveMappings()
+        rebuildMenu()
+    }
+
+    @objc private func editCustomShortcut(_ sender: NSMenuItem) {
+        guard let buttonKey = sender.representedObject as? String else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Custom Shortcut"
+        alert.informativeText = "Press any key combination, then click Save. Escape is recorded as a shortcut."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Clear")
+
+        let recordingLabel = NSTextField(labelWithString: "Waiting for shortcut…")
+        recordingLabel.frame = NSRect(x: 0, y: 0, width: 300, height: 20)
+        alert.accessoryView = recordingLabel
+        alert.buttons.first?.isEnabled = false
+
+        let recorder = ShortcutRecorder()
+        guard let monitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.keyDown, .flagsChanged],
+            handler: { event in
+                guard recorder.record(event) else { return event }
+                if let shortcut = recorder.shortcut {
+                    recordingLabel.stringValue = shortcut.displayName
+                    alert.buttons.first?.isEnabled = true
+                }
+                return nil
+            }
+        ) else { return }
+        defer { NSEvent.removeMonitor(monitor) }
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            guard let shortcut = recorder.shortcut else { return }
+            buttonMappings[buttonKey] = .customShortcut
+            customShortcuts[buttonKey] = shortcut
+        case .alertThirdButtonReturn:
+            buttonMappings[buttonKey] = ButtonAction.none
+            customShortcuts.removeValue(forKey: buttonKey)
+        default:
+            return
+        }
         saveMappings()
         rebuildMenu()
     }
@@ -357,6 +543,20 @@ class MenuBarManager {
     
     func getMapping(for button: String) -> ButtonAction {
         return buttonMappings[button] ?? .none
+    }
+
+    func executeCustomShortcut(for button: String) {
+        guard let shortcut = customShortcuts[button] else { return }
+        sendShortcut(shortcut)
+    }
+
+    func executeButtonMapping(for button: String) {
+        let action = getMapping(for: button)
+        if action == .customShortcut {
+            executeCustomShortcut(for: button)
+        } else {
+            executeAction(action.rawValue)
+        }
     }
     
     // Map HID codes to button names
@@ -476,6 +676,8 @@ class MenuBarManager {
             sendModifierTap(kVK_RightOption, flag: .maskAlternate)
         case .trackpadClick:
             performClick()
+        case .customShortcut:
+            break // dispatched with the button key by executeButtonMapping(for:)
         }
     }
 
@@ -500,6 +702,56 @@ class MenuBarManager {
         down?.post(tap: .cghidEventTap)
         usleep(10000)
         up?.post(tap: .cghidEventTap)
+    }
+
+    private func sendShortcut(_ shortcut: CustomShortcut) {
+        var activeModifiers: [UInt16] = []
+        for keyCode in shortcut.modifierKeyCodes {
+            activeModifiers.append(keyCode)
+            postKey(Int(keyCode), flags: flags(for: activeModifiers), keyDown: true)
+        }
+
+        if let keyCode = shortcut.keyCode {
+            let flags = flags(for: activeModifiers)
+            postKey(Int(keyCode), flags: flags, keyDown: true)
+            usleep(10000)
+            postKey(Int(keyCode), flags: flags, keyDown: false)
+        } else {
+            usleep(10000)
+        }
+
+        for keyCode in activeModifiers.reversed() {
+            activeModifiers.removeLast()
+            postKey(Int(keyCode), flags: flags(for: activeModifiers), keyDown: false)
+        }
+    }
+
+    private func postKey(_ keyCode: Int, flags: CGEventFlags, keyDown: Bool) {
+        let src = CGEventSource(stateID: .hidSystemState)
+        let event = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keyCode), keyDown: keyDown)
+        event?.flags = flags
+        event?.post(tap: .cghidEventTap)
+    }
+
+    private func flags(for modifierKeyCodes: [UInt16]) -> CGEventFlags {
+        modifierKeyCodes.reduce(into: []) { flags, keyCode in
+            switch Int(keyCode) {
+            case kVK_Command, kVK_RightCommand:
+                flags.insert(.maskCommand)
+            case kVK_Option, kVK_RightOption:
+                flags.insert(.maskAlternate)
+            case kVK_Control, kVK_RightControl:
+                flags.insert(.maskControl)
+            case kVK_Shift, kVK_RightShift:
+                flags.insert(.maskShift)
+            case kVK_Function:
+                flags.insert(.maskSecondaryFn)
+            case kVK_CapsLock:
+                flags.insert(.maskAlphaShift)
+            default:
+                break
+            }
+        }
     }
 
     /// Tap a modifier key alone (e.g. Right Command) — used to trigger push-to-talk dictation.
