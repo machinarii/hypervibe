@@ -42,6 +42,15 @@ Each physical Siri Remote button is independently assignable via the menu bar.
 | Trackpad click | Left mouse click |
 | Siri/mic button | Space on hold (Claude voice dictation must be enabled) |
 
+### Custom Keyboard Shortcuts
+
+Any non-trackpad button can send a custom keyboard shortcut, including a bare key,
+modifier-only key, or a combination such as Right Option + Space. In **Button
+Mappings**, choose **Custom Shortcut…**, press the shortcut, then click **Save**.
+HyperVibe sends it as a quick tap and preserves left/right modifier keys, which is
+useful for matching a Superwhisper global shortcut exactly. Select the displayed
+**Custom: …** entry again to edit it, or choose **Clear** to remove it.
+
 **Hold-Capable Buttons:** Push-to-talk actions require buttons that emit both press and release HID events. Only Play/Pause, Volume Up, Volume Down, and Siri buttons allow for both events. Also this button can trigger right command or option key for other dictation apps like [VoiceInk](https://github.com/Beingpax/VoiceInk).
 
 

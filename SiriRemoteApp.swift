@@ -143,10 +143,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        let action = menuBarManager.getMapping(for: buttonName)
-        if action != .none {
-            menuBarManager.executeAction(action.rawValue)
-        }
+        menuBarManager.executeButtonMapping(for: buttonName)
         // Always consume — no action in this app corresponds to a system media key anymore,
         // so we never want macOS's default media handler to fire.
         return true
