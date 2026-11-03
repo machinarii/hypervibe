@@ -61,6 +61,13 @@ class RemoteInputHandler {
         }
         
         guard !devices.contains(where: { $0 == device }) else { return }
+
+        // Skip digitizer (0x0D) and Apple vendor (0xFF00) interfaces so MultitouchSupport
+        // continues receiving touch frames on A1513 (0x026D).
+        let usagePage = IOHIDDeviceGetProperty(device, kIOHIDPrimaryUsagePageKey as CFString) as? Int ?? 0
+        if usagePage == 0x0D || usagePage == 0xFF00 {
+            return
+        }
         
         // Seize device to prevent system from handling events
         let openResult = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice))
@@ -247,8 +254,8 @@ class RemoteInputHandler {
         let spec: (keyCode: Int, flags: CGEventFlags)
         switch action {
         case .spaceKey: spec = (kVK_Space,        [])
-        case .rightCmd: spec = (kVK_RightCommand, .maskCommand)
-        case .rightOpt: spec = (kVK_RightOption,  .maskAlternate)
+        case .rightCmd: spec = (kVK_RightCommand, CGEventFlags(rawValue: CGEventFlags.maskCommand.rawValue | 0x10))
+        case .rightOpt: spec = (kVK_RightOption,  CGEventFlags(rawValue: CGEventFlags.maskAlternate.rawValue | 0x40))
         default: return
         }
 

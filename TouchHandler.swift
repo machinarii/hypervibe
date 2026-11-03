@@ -156,10 +156,7 @@ class TouchHandler {
                 return
             }
         }
-        // Fallback: use second device if available
-        if deviceList.count > 1 {
-            startDevice(deviceList[1])
-        } else if device != nil {
+        if device != nil {
             // Clear stale ref so next checkAndReconnect will retry when the remote reappears in the list.
             stopDevice()
         }

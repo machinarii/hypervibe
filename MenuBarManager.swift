@@ -471,9 +471,9 @@ class MenuBarManager {
         case .spaceKey:
             sendKey(kVK_Space)
         case .rightCmd:
-            sendModifierTap(kVK_RightCommand, flag: .maskCommand)
+            sendModifierTap(kVK_RightCommand, flag: CGEventFlags(rawValue: CGEventFlags.maskCommand.rawValue | 0x10))
         case .rightOpt:
-            sendModifierTap(kVK_RightOption, flag: .maskAlternate)
+            sendModifierTap(kVK_RightOption, flag: CGEventFlags(rawValue: CGEventFlags.maskAlternate.rawValue | 0x40))
         case .trackpadClick:
             performClick()
         }
