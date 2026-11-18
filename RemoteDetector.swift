@@ -35,10 +35,17 @@ class RemoteDetector {
     private let processingQueue = DispatchQueue(label: "com.hypervibe.deviceProcessing")
     
     private let appleVendorID: Int = 0x004C
+    /// USB vendor ID. A2854 plugged in over USB-C reports this, not the Bluetooth ID 0x004C.
+    private let usbVendorID: Int = 0x05AC
+    /// A2854 (3rd-gen, USB-C). Same product ID on USB and Bluetooth.
+    private let a2854ProductID: Int = 0x0315
     
-    // Known Siri Remote / Apple TV Remote product IDs
+    // Known Siri Remote / Apple TV Remote product IDs.
+    // Over Bluetooth, A2854's HID name is the unit serial, not "Siri Remote",
+    // so the name fallback below will not match it. Over USB the name is
+    // "Apple TV Remote" and the vendor ID is 0x05AC.
     private let knownProductIDs: [Int] = [
-        0x0221, 0x0255, 0x0266, 0x0267, 0x0269,
+        0x0221, 0x0255, 0x0266, 0x0267, 0x0269, 0x026D,
         0x0C4E, 0x0C4F, 0x030D, 0x030E
     ]
     
@@ -63,6 +70,10 @@ class RemoteDetector {
             [kIOHIDVendorIDKey: appleVendorID, kIOHIDPrimaryUsagePageKey: 0x0D],   // Digitizer / Game Controls
             [kIOHIDVendorIDKey: appleVendorID, kIOHIDPrimaryUsagePageKey: 0xFF00], // Apple vendor-defined
             [kIOHIDVendorIDKey: appleVendorID, kIOHIDPrimaryUsagePageKey: 0x01],   // Generic Desktop (kept for keyboards/trackpads)
+            [kIOHIDVendorIDKey: appleVendorID, kIOHIDProductIDKey: a2854ProductID],
+            // A2854 over USB: vendor 0x05AC, product 0x0315. Both the Consumer
+            // Control interface and the vendor Device Management interface.
+            [kIOHIDVendorIDKey: usbVendorID, kIOHIDProductIDKey: a2854ProductID],
         ]
         IOHIDManagerSetDeviceMatchingMultiple(manager, matchingDicts as CFArray)
 
@@ -96,13 +107,20 @@ class RemoteDetector {
     }
     
     private func enumerateAllDevices() {
-        guard let manager = manager,
-              let deviceSet = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else {
-            rmDebug("🛰 IOHIDManagerCopyDevices returned nil/empty (TCC block or matching mismatch)")
+        guard let manager = manager else { return }
+        guard let raw = IOHIDManagerCopyDevices(manager) else {
+            rmDebug("🛰 IOHIDManagerCopyDevices returned nil (TCC block or matching mismatch)")
             return
         }
-        rmDebug("🛰 enumeration found \(deviceSet.count) HID device(s) matching filter")
-        for device in deviceSet {
+        let count = CFSetGetCount(raw)
+        rmDebug("🛰 enumeration found \(count) HID device(s) matching filter")
+        guard count > 0 else { return }
+        let values = UnsafeMutablePointer<UnsafeRawPointer?>.allocate(capacity: count)
+        defer { values.deallocate() }
+        CFSetGetValues(raw, values)
+        for i in 0..<count {
+            guard let ptr = values[i] else { continue }
+            let device = Unmanaged<IOHIDDevice>.fromOpaque(ptr).takeUnretainedValue()
             let v = IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? Int ?? -1
             let p = IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? Int ?? -1
             let n = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String ?? "?"
@@ -117,11 +135,25 @@ class RemoteDetector {
     }
     
     private func isSiriRemote(_ device: IOHIDDevice) -> Bool {
-        guard let vendorID = IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? Int,
-              vendorID == appleVendorID else { return false }
+        guard let vendorID = IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? Int else {
+            return false
+        }
+        let productID = IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? Int
+
+        // USB-C A2854. Vendor is Apple's USB ID, and the product string is "Apple TV Remote".
+        if vendorID == usbVendorID && productID == a2854ProductID {
+            return true
+        }
+        guard vendorID == appleVendorID else { return false }
+
+        if productID == a2854ProductID {
+            let page = IOHIDDeviceGetProperty(device, kIOHIDPrimaryUsagePageKey as CFString) as? Int
+            let usage = IOHIDDeviceGetProperty(device, kIOHIDPrimaryUsageKey as CFString) as? Int
+            // Leave the dedicated BLE microphone interface with the system.
+            return page != 0x0C || usage != 0x04
+        }
         
-        if let productID = IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? Int,
-           knownProductIDs.contains(productID) {
+        if let productID, knownProductIDs.contains(productID) {
             return true
         }
         
