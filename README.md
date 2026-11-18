@@ -125,6 +125,19 @@ A diagnostic log is written to `/tmp/hypervibe.log` (NSLog is redacted under har
 
 ---
 
+## Record from an A2854 Siri Remote
+
+The third-generation USB-C Siri Remote sends microphone audio over Bluetooth while its side Siri button is held. USB can charge the remote and expose its serial number in **System Information → USB → Apple TV Remote**. The USB connection has no audio input.
+
+1. Temporarily disconnect any nearby Apple TV from power. Open **System Settings → Bluetooth**, hold the remote near the Mac, and press **Back (‹) + Volume Up** for about five seconds. In **Nearby Devices**, connect to the new entry. It may first appear as a Bluetooth address and then as the remote's serial number. If it never appears, hold **TV/Control Center + Volume Down** for about five seconds, release, wait ten seconds, and try again. The remote itself has no visible pairing light. [Apple's pairing and restart instructions](https://support.apple.com/en-us/102569) · [Mac pairing guide](https://www.iospirit.com/support/faqs/remotebuddy/siri-remote/problems-pairing-siri-remote-with-macos)
+2. Install [SiriRemoteForge Full Setup](https://github.com/HOLODATA-COM/SiriRemoteForge/releases) (Apple silicon, macOS 13 or later) and put Apple's [PacketLogger.app](https://developer.apple.com/download/all/?q=Additional%20Tools%20for%20Xcode) in `/Applications`. Full Setup installs a system audio plug-in and a capture service. Quit the SiriRemoteForge app before opening this copy of HyperVibe so only one app handles the remote's buttons and SiriRemoteForge's built-in microphone fallback stays inactive. The background capture service remains available. [SiriRemoteForge microphone setup](https://github.com/HOLODATA-COM/SiriRemoteForge#microphone)
+3. Open this repository's built `HyperVibe.app`. In the menu bar choose **Start Siri Remote Recording** and grant Microphone access when prompted. When the menu changes to **Stop Siri Remote Recording**, hold the side Siri button and speak. On the first recording, hold it for a moment before speaking to let the capture service start.
+4. Choose **Stop Siri Remote Recording** to save the WAV. **Show Recordings in Finder** opens `~/Music/HyperVibe Recordings`.
+
+HyperVibe opens the **Siri Remote Mic** virtual input directly. If a file is silent, confirm the remote is connected by Bluetooth, confirm **Siri Remote Mic** appears under **System Settings → Sound → Input**, and check that the side Siri button was held while speaking. For dictation in another app, select **Siri Remote Mic** as that app's input and use HyperVibe's existing push-to-talk button mapping.
+
+---
+
 ### Why two paths for the same button?
 
 A physical Siri Remote press can arrive two ways:

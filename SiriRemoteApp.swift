@@ -18,6 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var remoteInputHandler: RemoteInputHandler?
     private var mediaKeyInterceptor: MediaKeyInterceptor?
     private var touchHandler: TouchHandler?
+    private let remoteAudioRecorder = RemoteAudioRecorder()
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("🚀 HyperVibe starting...")
@@ -38,7 +39,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.isVisible = true
         
         // Initialize menu bar manager
-        menuBarManager = MenuBarManager(statusItem: statusItem)
+        menuBarManager = MenuBarManager(statusItem: statusItem, remoteAudioRecorder: remoteAudioRecorder)
         
         // Check accessibility permissions
         checkAccessibilityPermissions()
@@ -92,7 +93,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        cleanup()
+        if remoteAudioRecorder.finishBeforeQuitting({
+            sender.reply(toApplicationShouldTerminate: true)
+        }) {
+            return .terminateLater
+        }
         return .terminateNow
     }
     

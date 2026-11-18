@@ -76,6 +76,8 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" <<EOF
 	<string>HyperVibe needs Bluetooth access to connect to your Siri Remote trackpad.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>HyperVibe needs Bluetooth access to connect to your Siri Remote trackpad.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>HyperVibe records audio from your Siri Remote when you start a recording.</string>
 </dict>
 </plist>
 EOF

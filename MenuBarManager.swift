@@ -86,6 +86,8 @@ class MenuBarManager {
     private let statusItem: NSStatusItem
     private let menu: NSMenu
     private let statusMenuItem: NSMenuItem
+    private let recordingMenuItem = NSMenuItem(title: "Start Siri Remote Recording", action: #selector(toggleRecording), keyEquivalent: "")
+    private let remoteAudioRecorder: RemoteAudioRecorder
     
     // Button mappings (stored in UserDefaults)
     private var buttonMappings: [String: ButtonAction] = [:]
@@ -106,14 +108,19 @@ class MenuBarManager {
     /// Set by app delegate so menu bar can delegate media actions to MediaController.
     var mediaController: MediaController?
 
-    init(statusItem: NSStatusItem) {
+    init(statusItem: NSStatusItem, remoteAudioRecorder: RemoteAudioRecorder) {
         self.statusItem = statusItem
+        self.remoteAudioRecorder = remoteAudioRecorder
         self.menu = NSMenu()
         self.statusMenuItem = NSMenuItem(title: "Status: Disconnected", action: nil, keyEquivalent: "")
         
         loadMappings()
         loadSwipeMappings()
         setupMenuBar()
+        remoteAudioRecorder.onStateChange = { [weak self] state in
+            self?.updateRecordingMenu(state)
+        }
+        remoteAudioRecorder.onError = Self.showRecordingError
     }
     
     private func loadMappings() {
@@ -247,6 +254,15 @@ class MenuBarManager {
         
         menu.addItem(NSMenuItem.separator())
         
+        recordingMenuItem.target = self
+        menu.addItem(recordingMenuItem)
+        updateRecordingMenu(remoteAudioRecorder.state)
+
+        let recordingsItem = NSMenuItem(title: "Show Recordings in Finder", action: #selector(showRecordings), keyEquivalent: "")
+        recordingsItem.target = self
+        menu.addItem(recordingsItem)
+        menu.addItem(NSMenuItem.separator())
+
         // Button Mappings submenu
         let mappingsItem = NSMenuItem(title: "Button Mappings", action: nil, keyEquivalent: "")
         let mappingsSubmenu = NSMenu()
@@ -329,6 +345,49 @@ class MenuBarManager {
         menu.addItem(quitItem)
     }
     
+    private func updateRecordingMenu(_ state: RemoteAudioRecorder.State) {
+        switch state {
+        case .idle:
+            recordingMenuItem.title = "Start Siri Remote Recording"
+            recordingMenuItem.action = #selector(toggleRecording)
+        case .starting:
+            recordingMenuItem.title = "Starting Siri Remote Recording…"
+            recordingMenuItem.action = nil
+        case .recording:
+            recordingMenuItem.title = "Stop Siri Remote Recording"
+            recordingMenuItem.action = #selector(toggleRecording)
+        case .stopping:
+            recordingMenuItem.title = "Saving Siri Remote Recording…"
+            recordingMenuItem.action = nil
+        }
+    }
+
+    @objc private func toggleRecording() {
+        if remoteAudioRecorder.state == .recording {
+            remoteAudioRecorder.stop()
+        } else {
+            remoteAudioRecorder.start()
+        }
+    }
+
+    @objc private func showRecordings() {
+        let folder = RemoteAudioRecorder.recordingsFolder
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(folder)
+        } catch {
+            Self.showRecordingError(error.localizedDescription)
+        }
+    }
+
+    private static func showRecordingError(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Siri Remote Recording"
+        alert.informativeText = message
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
     @objc private func changeMapping(_ sender: NSMenuItem) {
         guard let (buttonKey, action) = sender.representedObject as? (String, ButtonAction) else {
             return

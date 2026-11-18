@@ -13,6 +13,7 @@ SWIFT_FILES=(
     "MenuBarManager.swift"
     "RemoteDetector.swift"
     "RemoteInputHandler.swift"
+    "RemoteAudioRecorder.swift"
     "CursorController.swift"
     "MediaController.swift"
     "MediaKeyInterceptor.swift"
@@ -52,6 +53,7 @@ swiftc \
     -framework IOKit \
     -framework CoreGraphics \
     -framework AudioToolbox \
+    -framework AVFoundation \
     -framework Carbon \
     -framework AppKit \
     -framework MultitouchSupport
